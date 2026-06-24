@@ -37,13 +37,12 @@ const taskSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-taskSchema.pre('save', function(next) {
+taskSchema.pre('save', async function() {
   this.updatedAt = new Date();
   // Tự đánh dấu quá hạn
   if (this.deadline && new Date() > this.deadline && this.status !== 'Hoàn thành' && this.status !== 'Hủy') {
     this.status = 'Quá hạn';
   }
-  next();
 });
 
 module.exports = mongoose.model('Task', taskSchema);

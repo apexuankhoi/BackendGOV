@@ -92,7 +92,7 @@ exports.createDocument = async (req, res) => {
 // Cập nhật văn bản
 exports.updateDocument = async (req, res) => {
   try {
-    const doc = await Document.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const doc = await Document.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
     if (!doc) return res.status(404).json({ message: 'Không tìm thấy văn bản' });
 
     await ActivityLog.create({

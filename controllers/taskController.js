@@ -97,7 +97,7 @@ exports.createTask = async (req, res) => {
 // Cập nhật công việc
 exports.updateTask = async (req, res) => {
   try {
-    const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const task = await Task.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
     if (!task) return res.status(404).json({ message: 'Không tìm thấy công việc' });
 
     await ActivityLog.create({

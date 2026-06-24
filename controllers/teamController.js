@@ -40,7 +40,7 @@ exports.approveTeam = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body; // 'APPROVED' or 'REJECTED'
 
-    const team = await Team.findByIdAndUpdate(id, { status }, { new: true });
+    const team = await Team.findByIdAndUpdate(id, { status }, { returnDocument: 'after' });
     if (!team) return res.status(404).json({ message: 'Không tìm thấy đội hình' });
 
     res.json({ message: `Đã ${status === 'APPROVED' ? 'duyệt' : 'từ chối'} đội hình`, team });
