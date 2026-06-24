@@ -76,13 +76,14 @@ exports.register = async (req, res) => {
   try {
     const { username, email, password, role, province, district, commune, theNganhImage, cccd, dob, address, phone, otp } = req.body;
     if (await User.findOne({ email })) return res.status(400).json({ message: 'Email đã tồn tại' });
-    
+    // Temporarily disable OTP validation
+    /*
     if (!otp) return res.status(400).json({ message: 'Vui lòng nhập mã xác thực OTP' });
     const stored = otpStore.get(email);
     if (!stored || stored.otp !== otp || Date.now() > stored.expires) {
       return res.status(400).json({ message: 'Mã xác thực không hợp lệ hoặc đã hết hạn' });
     }
-
+    */
     // Logic kiểm duyệt Thẻ Ngành cho Cán bộ bằng AI
     if (role === 'COMMUNE_ADMIN' || role === 'PROVINCE_ADMIN') {
       if (!theNganhImage) return res.status(400).json({ message: 'Vui lòng cung cấp ảnh Thẻ Ngành/Thẻ Cán bộ.' });
