@@ -19,6 +19,11 @@ const userSchema = new mongoose.Schema({
     commune: { type: String }   // Xã/Phường
   },
   
+  // Dữ liệu eKYC
+  cccd: { type: String },
+  dob: { type: String },
+  address: { type: String },
+  
   createdAt: { type: Date, default: Date.now }
 });
 

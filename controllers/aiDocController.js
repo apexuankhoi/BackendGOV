@@ -5,11 +5,17 @@ const Document = require('../models/Document');
 const Task = require('../models/Task');
 const ActivityLog = require('../models/ActivityLog');
 
-// Đọc text từ PDF
-async function extractTextFromPDF(filePath) {
+// Hàm Helper để lấy text từ PDF (hỗ trợ cả file cục bộ và Cloudinary URL)
+async function extractTextFromPDF(filePathOrUrl) {
   try {
     const pdfParse = require('pdf-parse');
-    const buffer = fs.readFileSync(filePath);
+    let buffer;
+    if (filePathOrUrl.startsWith('http')) {
+      const response = await axios.get(filePathOrUrl, { responseType: 'arraybuffer' });
+      buffer = Buffer.from(response.data);
+    } else {
+      buffer = fs.readFileSync(filePathOrUrl);
+    }
     const data = await pdfParse(buffer);
     return data.text || '';
   } catch (err) {
@@ -18,48 +24,86 @@ async function extractTextFromPDF(filePath) {
   }
 }
 
-// Gọi OpenAI Model để phân tích văn bản
-async function callAI(prompt) {
+// Gọi OpenAI Model (Text Mode) - Hỗ trợ phong cách Tham Mưu Chuyên Sâu
+async function callAIText(prompt) {
   const token = process.env.OPENAI_API_KEY;
-  if (!token) {
-    return { error: 'Chưa cấu hình OPENAI_API_KEY. Vui lòng liên hệ Admin.' };
-  }
+  if (!token) return { error: 'Chưa cấu hình OPENAI_API_KEY.' };
 
   try {
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       messages: [
         {
           role: 'system',
-          content: `Bạn là trợ lý AI chuyên phân tích văn bản hành chính Việt Nam. 
-Nhiệm vụ: đọc nội dung văn bản và trích xuất thông tin chính xác.
-Luôn trả lời bằng JSON hợp lệ, không kèm markdown hay giải thích.`
+          content: `Bạn là Cán bộ Tham mưu Công an nhân dân/UBND cấp xã dày dặn kinh nghiệm. 
+Nhiệm vụ của bạn là đọc nội dung văn bản và trích xuất thông tin, đề xuất hướng xử lý với văn phong hành chính nhà nước, trang trọng, chính xác. 
+Ví dụ: "Đề xuất đồng chí Trưởng Công an xã phân công CSKV rà soát...", "Kính báo cáo Thường trực Đảng ủy xem xét...".
+Luôn trả lời JSON thuần túy (không bọc trong \`\`\`json).`
         },
         { role: 'user', content: prompt }
       ],
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       temperature: 0.3,
-      max_tokens: 2000
     }, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+      headers: { 'Authorization': `Bearer ${token}` }
     });
 
-    const text = response.data.choices[0].message.content;
-    // Cố gắng parse JSON từ response
+    let text = response.data.choices[0].message.content.trim();
+    // Parse JSON
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-    return { rawResponse: text };
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    return JSON.parse(text);
   } catch (err) {
-    console.error('AI API Error:', err.response?.data || err.message);
-    return { error: 'Lỗi kết nối AI: ' + (err.response?.data?.error?.message || err.message) };
+    return { error: 'Lỗi kết nối AI Text: ' + err.message };
   }
 }
 
-// API: AI đọc file đính kèm của văn bản
+// Gọi OpenAI Model (Vision Mode) cho file ảnh (Ảnh scan/chụp)
+async function callAIVision(imageUrl) {
+  const token = process.env.OPENAI_API_KEY;
+  if (!token) return { error: 'Chưa cấu hình OPENAI_API_KEY.' };
+
+  try {
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: `Bạn là Cán bộ Tham mưu Công an nhân dân/UBND cấp xã. Dưới đây là ảnh chụp/scan của một văn bản hành chính.
+Hãy đọc toàn bộ nội dung và trích xuất thành JSON thuần túy (không bọc trong \`\`\`json) với các trường:
+{
+  "soVanBan": "số văn bản (VD: 125/KH-CAX)",
+  "loaiVanBan": "Công văn, Báo cáo, Kế hoạch, Tờ trình, Thông báo, Quyết định...",
+  "ngayBanHanh": "DD/MM/YYYY",
+  "coQuanBanHanh": "tên cơ quan",
+  "nguoiKy": "họ tên",
+  "chucVuNguoiKy": "chức vụ",
+  "trichYeu": "trích yếu nội dung (1-2 câu)",
+  "linhVuc": "lĩnh vực",
+  "doKhan": "Thường/Khẩn/Thượng khẩn/Hỏa tốc",
+  "hanXuLy": "DD/MM/YYYY hoặc null",
+  "deXuatXuLy": "Đề xuất xử lý văn bản này (dùng văn phong Cán bộ Tham mưu, vd: 'Đề xuất Trưởng CAX giao CSKV...')",
+  "congViecCanLam": ["Danh sách 1-3 công việc cụ thể cần làm (mảng string)"]
+}` },
+            { type: 'image_url', image_url: { url: imageUrl } }
+          ]
+        }
+      ],
+      model: 'gpt-4o-mini',
+      max_tokens: 1500,
+    }, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    let text = response.data.choices[0].message.content.trim();
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    return JSON.parse(text);
+  } catch (err) {
+    return { error: 'Lỗi kết nối AI Vision: ' + err.message };
+  }
+}
+
+// API: AI đọc file đính kèm của văn bản (đã lưu database)
 exports.aiReadDocument = async (req, res) => {
   try {
     const { id } = req.params;
@@ -67,204 +111,185 @@ exports.aiReadDocument = async (req, res) => {
     if (!doc) return res.status(404).json({ message: 'Không tìm thấy văn bản' });
 
     let textContent = '';
+    let imageUrl = null;
 
-    // Nếu có file PDF đính kèm, đọc text từ PDF
     if (doc.attachments && doc.attachments.length > 0) {
       for (const att of doc.attachments) {
         if (att.mimeType === 'application/pdf') {
-          const fullPath = path.resolve(att.filePath);
-          if (fs.existsSync(fullPath)) {
-            textContent += await extractTextFromPDF(fullPath);
-          }
+          textContent += await extractTextFromPDF(att.filePath);
+        } else if (att.mimeType.startsWith('image/')) {
+          imageUrl = att.filePath; // Lấy URL Cloudinary của ảnh
+          break; // Ưu tiên đọc ảnh bằng Vision
         }
       }
     }
 
-    // Nếu có nội dung OCR sẵn thì dùng
-    if (!textContent && doc.ocrContent) {
-      textContent = doc.ocrContent;
-    }
-
-    // Nếu có summary/notes thì dùng
-    if (!textContent) {
-      textContent = [doc.summary, doc.notes].filter(Boolean).join('\n');
-    }
-
-    if (!textContent || textContent.trim().length < 10) {
-      return res.status(400).json({
-        message: 'Không đọc được nội dung từ file. Vui lòng upload file PDF có text (không phải ảnh scan).'
-      });
-    }
-
-    // Gửi AI phân tích
-    const prompt = `Phân tích văn bản hành chính sau và trích xuất thông tin. Trả lời bằng JSON với các trường:
+    let aiResult;
+    
+    // Nếu có ảnh, dùng Vision OCR trực tiếp
+    if (imageUrl) {
+      aiResult = await callAIVision(imageUrl);
+    } else {
+      // Nếu không có ảnh, dùng text từ PDF
+      if (!textContent) textContent = [doc.summary, doc.notes].filter(Boolean).join('\n');
+      if (!textContent || textContent.trim().length < 5) {
+        return res.status(400).json({ message: 'PDF không có chữ (bản scan). Vui lòng upload file ảnh JPG/PNG để AI quét được.' });
+      }
+      const prompt = `Phân tích văn bản hành chính sau và trích xuất JSON thuần túy:
 {
-  "soVanBan": "số văn bản (VD: 125/KH-CAX)",
-  "loaiVanBan": "một trong: Công văn, Báo cáo, Kế hoạch, Tờ trình, Thông báo, Quyết định, Giấy mời, Chỉ thị, Hướng dẫn, Khác",
-  "ngayBanHanh": "ngày ban hành (DD/MM/YYYY)",
-  "coQuanBanHanh": "tên cơ quan ban hành",
-  "nguoiKy": "họ tên người ký",
-  "chucVuNguoiKy": "chức vụ người ký",
-  "trichYeu": "trích yếu nội dung (1-2 câu)",
-  "linhVuc": "lĩnh vực (VD: An ninh trật tự, Cư trú, Phòng cháy, Hành chính...)",
-  "doKhan": "một trong: Thường, Khẩn, Thượng khẩn, Hỏa tốc",
-  "hanXuLy": "hạn xử lý nếu có (DD/MM/YYYY) hoặc null",
-  "deXuatXuLy": "đề xuất cách xử lý văn bản này (1-2 câu)",
-  "congViecCanLam": "danh sách công việc cần làm từ văn bản này (mảng string)"
+  "soVanBan": "số văn bản", "loaiVanBan": "loại", "ngayBanHanh": "DD/MM/YYYY", "coQuanBanHanh": "cơ quan",
+  "nguoiKy": "họ tên", "chucVuNguoiKy": "chức vụ", "trichYeu": "trích yếu", "linhVuc": "lĩnh vực", "doKhan": "Thường/Khẩn/Hỏa tốc",
+  "hanXuLy": "DD/MM/YYYY hoặc null", "deXuatXuLy": "Đề xuất tham mưu xử lý (văn phong CAND)", "congViecCanLam": ["việc 1"]
 }
-
-NỘI DUNG VĂN BẢN:
+NỘI DUNG:
 ${textContent.substring(0, 4000)}`;
-
-    const aiResult = await callAI(prompt);
-
-    if (aiResult.error) {
-      return res.status(500).json({ message: aiResult.error });
+      aiResult = await callAIText(prompt);
     }
 
-    // Lưu nội dung OCR và kết quả AI
-    doc.ocrContent = textContent.substring(0, 10000);
+    if (aiResult.error) return res.status(500).json({ message: aiResult.error });
+
+    doc.ocrContent = textContent ? textContent.substring(0, 5000) : 'Đã OCR từ ảnh bằng AI Vision.';
     doc.aiSuggestion = aiResult.deXuatXuLy || '';
     doc.aiExtracted = true;
-
-    // Auto-fill các trường từ AI
+    
     if (aiResult.soVanBan && !doc.documentNumber) doc.documentNumber = aiResult.soVanBan;
     if (aiResult.loaiVanBan) doc.category = aiResult.loaiVanBan;
     if (aiResult.coQuanBanHanh && !doc.issuingAgency) doc.issuingAgency = aiResult.coQuanBanHanh;
     if (aiResult.nguoiKy && !doc.signer) doc.signer = aiResult.nguoiKy;
-    if (aiResult.chucVuNguoiKy) doc.signerTitle = aiResult.chucVuNguoiKy;
     if (aiResult.trichYeu && !doc.summary) doc.summary = aiResult.trichYeu;
-    if (aiResult.linhVuc) doc.field = aiResult.linhVuc;
-    if (aiResult.doKhan) doc.urgency = aiResult.doKhan;
-    if (aiResult.ngayBanHanh) {
-      const parts = aiResult.ngayBanHanh.split('/');
-      if (parts.length === 3) doc.issuedDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-    }
-    if (aiResult.hanXuLy) {
-      const parts = aiResult.hanXuLy.split('/');
-      if (parts.length === 3) doc.deadline = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-    }
 
     await doc.save();
-
-    // Ghi nhật ký
+    
     await ActivityLog.create({
       user: req.user.userId,
       action: 'AI_READ_DOCUMENT',
-      target: `${doc.type === 'INCOMING' ? 'VB Đến' : 'VB Đi'} #${doc.documentNumber || doc._id}`,
+      target: `${doc.documentNumber || doc._id}`,
       details: `AI trích xuất: ${aiResult.trichYeu || 'N/A'}`
     });
 
-    res.json({
-      message: 'AI đã phân tích văn bản thành công',
-      aiResult,
-      document: doc,
-      suggestedTasks: aiResult.congViecCanLam || []
-    });
+    res.json({ message: 'AI phân tích thành công', aiResult, document: doc, suggestedTasks: aiResult.congViecCanLam || [] });
   } catch (err) {
-    console.error('AI Read Error:', err);
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 };
 
-// API: AI đọc file upload trực tiếp (không cần tạo văn bản trước)
+// API: AI đọc file upload trực tiếp
 exports.aiReadUpload = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'Vui lòng upload file PDF' });
-    }
+    if (!req.file) return res.status(400).json({ message: 'Vui lòng upload file' });
 
+    let aiResult;
     let textContent = '';
-    if (req.file.mimetype === 'application/pdf') {
+
+    if (req.file.mimetype.startsWith('image/')) {
+      // Dùng Vision Mode
+      aiResult = await callAIVision(req.file.path);
+    } else if (req.file.mimetype === 'application/pdf') {
+      // Dùng Text Mode
       textContent = await extractTextFromPDF(req.file.path);
-    }
-
-    if (!textContent || textContent.trim().length < 10) {
-      // Cleanup file
-      try { fs.unlinkSync(req.file.path); } catch(e) {}
-      return res.status(400).json({
-        message: 'Không đọc được nội dung từ file. File có thể là ảnh scan — cần OCR. Vui lòng upload PDF có text.'
-      });
-    }
-
-    const prompt = `Phân tích văn bản hành chính sau và trích xuất thông tin. Trả lời bằng JSON:
+      if (!textContent || textContent.trim().length < 5) {
+        return res.status(400).json({ message: 'Đây là PDF Scan không chứa text. Vui lòng upload dạng ảnh JPG/PNG để AI dùng Vision quét.' });
+      }
+      const prompt = `Phân tích văn bản hành chính sau và trích xuất JSON thuần túy:
 {
-  "soVanBan": "số văn bản",
-  "loaiVanBan": "một trong: Công văn, Báo cáo, Kế hoạch, Tờ trình, Thông báo, Quyết định, Giấy mời, Chỉ thị, Hướng dẫn, Khác",
-  "ngayBanHanh": "DD/MM/YYYY",
-  "coQuanBanHanh": "tên cơ quan",
-  "nguoiKy": "họ tên",
-  "chucVuNguoiKy": "chức vụ",
-  "trichYeu": "trích yếu (1-2 câu)",
-  "linhVuc": "lĩnh vực",
-  "doKhan": "Thường/Khẩn/Thượng khẩn/Hỏa tốc",
-  "hanXuLy": "DD/MM/YYYY hoặc null",
-  "deXuatXuLy": "đề xuất xử lý",
-  "congViecCanLam": ["công việc 1", "công việc 2"]
+  "soVanBan": "số văn bản", "loaiVanBan": "loại", "ngayBanHanh": "DD/MM/YYYY", "coQuanBanHanh": "cơ quan",
+  "nguoiKy": "họ tên", "chucVuNguoiKy": "chức vụ", "trichYeu": "trích yếu", "linhVuc": "lĩnh vực", "doKhan": "Thường/Khẩn/Hỏa tốc",
+  "hanXuLy": "DD/MM/YYYY hoặc null", "deXuatXuLy": "Đề xuất tham mưu xử lý (văn phong CAND)", "congViecCanLam": ["việc 1"]
 }
-
 NỘI DUNG:
 ${textContent.substring(0, 4000)}`;
+      aiResult = await callAIText(prompt);
+    } else {
+      return res.status(400).json({ message: 'Chỉ hỗ trợ PDF và Ảnh (JPG/PNG)' });
+    }
 
-    const aiResult = await callAI(prompt);
+    if (aiResult && aiResult.error) return res.status(500).json({ message: aiResult.error });
 
-    // Ghi nhật ký
     await ActivityLog.create({
       user: req.user.userId,
       action: 'AI_READ_UPLOAD',
       target: req.file.originalname,
-      details: `AI trích xuất: ${aiResult.trichYeu || 'N/A'}`
+      details: 'Sử dụng AI OCR thành công.'
     });
 
     res.json({
-      message: 'AI đã phân tích file thành công',
+      message: 'AI phân tích thành công',
       aiResult,
-      file: {
-        originalName: req.file.originalname,
-        fileName: req.file.filename,
-        filePath: req.file.path,
-        fileSize: req.file.size,
-        mimeType: req.file.mimetype
-      },
-      ocrContent: textContent.substring(0, 5000)
+      file: { originalName: req.file.originalname, filePath: req.file.path, mimeType: req.file.mimetype },
+      ocrContent: textContent
     });
   } catch (err) {
-    console.error('AI Upload Read Error:', err);
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 };
 
-// API: AI tạo công việc từ văn bản
+// API: AI tạo công việc từ mảng string
 exports.aiCreateTasks = async (req, res) => {
   try {
     const { documentId, tasks: taskList } = req.body;
-    if (!taskList || !Array.isArray(taskList) || taskList.length === 0) {
-      return res.status(400).json({ message: 'Danh sách công việc trống' });
-    }
+    if (!taskList || taskList.length === 0) return res.status(400).json({ message: 'Danh sách công việc trống' });
 
     const created = [];
     for (const t of taskList) {
       const task = await Task.create({
         title: t.title || t,
-        description: t.description || '',
         assignedBy: req.user.userId,
-        assignedTo: t.assignedTo || undefined,
-        deadline: t.deadline || undefined,
-        priority: t.priority || 'Trung bình',
+        priority: 'Trung bình',
         sourceDocument: documentId || undefined,
         aiGenerated: true
       });
       created.push(task);
     }
+    res.status(201).json({ message: `Đã tạo ${created.length} công việc từ AI`, tasks: created });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// API: AI Báo cáo (Tự viết Báo cáo công tác tháng)
+exports.aiGenerateReport = async (req, res) => {
+  try {
+    // Truy xuất số lượng văn bản và công việc trong tháng này
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const docs = await Document.countDocuments({ createdAt: { $gte: startOfMonth } });
+    const tasksTotal = await Task.countDocuments({ createdAt: { $gte: startOfMonth } });
+    const tasksDone = await Task.countDocuments({ createdAt: { $gte: startOfMonth }, status: 'DONE' });
+    const tasksList = await Task.find({ createdAt: { $gte: startOfMonth } }).limit(20);
+
+    const tasksString = tasksList.map(t => `- [${t.status}] ${t.title}`).join('\n');
+
+    const prompt = `Bạn là Cán bộ Tham mưu Công an nhân dân/UBND xuất sắc. Hãy soạn thảo nội dung "Báo cáo công tác tháng" dựa trên các số liệu thực tế sau:
+- Tổng số văn bản đã tiếp nhận/xử lý trong tháng: ${docs}
+- Tổng số công việc đã tạo: ${tasksTotal} (Đã hoàn thành: ${tasksDone}, Tỷ lệ: ${tasksTotal ? Math.round(tasksDone/tasksTotal*100) : 0}%)
+- Các công việc tiêu biểu (tối đa 20):
+${tasksString}
+
+Yêu cầu Báo cáo phải gồm các phần (Trình bày bằng Markdown định dạng đẹp, sử dụng đúng văn phong Báo cáo hành chính nhà nước/CAND):
+1. Đánh giá tình hình chung
+2. Kết quả đạt được (số liệu cụ thể)
+3. Tồn tại, hạn chế (nếu tỷ lệ hoàn thành thấp)
+4. Phương hướng, nhiệm vụ trọng tâm tháng tới
+5. Đề xuất, kiến nghị.`;
+
+    const token = process.env.OPENAI_API_KEY;
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      messages: [{ role: 'user', content: prompt }],
+      model: 'gpt-4o-mini',
+      temperature: 0.5,
+    }, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    const reportContent = response.data.choices[0].message.content;
 
     await ActivityLog.create({
       user: req.user.userId,
-      action: 'AI_CREATE_TASKS',
-      target: `${created.length} công việc từ AI`,
-      details: created.map(t => t.title).join(', ')
+      action: 'AI_GENERATE_REPORT',
+      target: `Báo cáo tháng ${new Date().getMonth() + 1}`,
+      details: 'AI tổng hợp dữ liệu thành công.'
     });
 
-    res.status(201).json({ message: `Đã tạo ${created.length} công việc từ AI`, tasks: created });
+    res.json({ message: 'Tạo báo cáo thành công', report: reportContent });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
