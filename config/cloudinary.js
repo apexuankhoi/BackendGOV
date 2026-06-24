@@ -14,7 +14,7 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: process.env.CLOUDINARY_FOLDER || 'webgov_daklak', // Tên thư mục trên Cloudinary
-    allowed_formats: ['jpg', 'png', 'jpeg', 'pdf'], 
+    allowed_formats: ['jpg', 'png', 'jpeg', 'pdf', 'doc', 'docx'],
     // Cloudinary tự nhận diện định dạng gốc
   },
 });

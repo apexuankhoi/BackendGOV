@@ -4,6 +4,24 @@ const axios = require('axios');
 const Document = require('../models/Document');
 const Task = require('../models/Task');
 const ActivityLog = require('../models/ActivityLog');
+const mammoth = require('mammoth');
+
+async function extractTextFromDocx(filePathOrUrl) {
+  try {
+    let buffer;
+    if (filePathOrUrl.startsWith('http')) {
+      const response = await axios.get(filePathOrUrl, { responseType: 'arraybuffer' });
+      buffer = Buffer.from(response.data);
+    } else {
+      buffer = fs.readFileSync(filePathOrUrl);
+    }
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value || '';
+  } catch (err) {
+    console.error('Docx parse error:', err.message);
+    return '';
+  }
+}
 
 // Hàm Helper để lấy text từ PDF (hỗ trợ cả file cục bộ và Cloudinary URL)
 async function extractTextFromPDF(filePathOrUrl) {
@@ -117,6 +135,8 @@ exports.aiReadDocument = async (req, res) => {
       for (const att of doc.attachments) {
         if (att.mimeType === 'application/pdf') {
           textContent += await extractTextFromPDF(att.filePath);
+        } else if (att.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || att.mimeType === 'application/msword') {
+          textContent += await extractTextFromDocx(att.filePath);
         } else if (att.mimeType.startsWith('image/')) {
           imageUrl = att.filePath; // Lấy URL Cloudinary của ảnh
           break; // Ưu tiên đọc ảnh bằng Vision
@@ -188,7 +208,25 @@ exports.aiReadUpload = async (req, res) => {
       // Dùng Text Mode
       textContent = await extractTextFromPDF(req.file.path);
       if (!textContent || textContent.trim().length < 5) {
-        return res.status(400).json({ message: 'Đây là PDF Scan không chứa text. Vui lòng upload dạng ảnh JPG/PNG để AI dùng Vision quét.' });
+        // PDF Scan: Fallback to Vision Mode by requesting the .jpg version from Cloudinary
+        const imageUrl = req.file.path.replace(/\.pdf$/i, '.jpg');
+        aiResult = await callAIVision(imageUrl);
+      } else {
+        const prompt = `Phân tích văn bản hành chính sau và trích xuất JSON thuần túy:
+{
+  "soVanBan": "số văn bản", "loaiVanBan": "loại", "ngayBanHanh": "DD/MM/YYYY", "coQuanBanHanh": "cơ quan",
+  "nguoiKy": "họ tên", "chucVuNguoiKy": "chức vụ", "trichYeu": "trích yếu", "linhVuc": "lĩnh vực", "doKhan": "Thường/Khẩn/Hỏa tốc",
+  "hanXuLy": "DD/MM/YYYY hoặc null", "deXuatXuLy": "Đề xuất tham mưu xử lý (văn phong CAND)", "congViecCanLam": ["việc 1"]
+}
+NỘI DUNG:
+${textContent.substring(0, 4000)}`;
+        aiResult = await callAIText(prompt);
+      }
+    } else if (req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || req.file.mimetype === 'application/msword') {
+      // Dùng Text Mode cho Word
+      textContent = await extractTextFromDocx(req.file.path);
+      if (!textContent || textContent.trim().length < 5) {
+        return res.status(400).json({ message: 'File Word không có nội dung text hợp lệ.' });
       }
       const prompt = `Phân tích văn bản hành chính sau và trích xuất JSON thuần túy:
 {
@@ -200,7 +238,7 @@ NỘI DUNG:
 ${textContent.substring(0, 4000)}`;
       aiResult = await callAIText(prompt);
     } else {
-      return res.status(400).json({ message: 'Chỉ hỗ trợ PDF và Ảnh (JPG/PNG)' });
+      return res.status(400).json({ message: 'Chỉ hỗ trợ PDF, Ảnh (JPG/PNG) và Word (DOC/DOCX)' });
     }
 
     if (aiResult && aiResult.error) return res.status(500).json({ message: aiResult.error });
