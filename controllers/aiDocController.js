@@ -24,12 +24,18 @@ async function extractTextFromDocx(filePathOrUrl) {
 }
 
 // Hàm Helper để lấy text từ PDF (hỗ trợ cả file cục bộ và Cloudinary URL)
-async function extractTextFromPDF(filePathOrUrl) {
+async function extractTextFromPDF(filePathOrUrl, publicId = null) {
   try {
     const pdfParse = require('pdf-parse');
     let buffer;
     if (filePathOrUrl.startsWith('http')) {
-      const response = await axios.get(filePathOrUrl, { responseType: 'arraybuffer' });
+      let downloadUrl = filePathOrUrl;
+      // Nếu có publicId, tạo Signed URL để lách luật chặn PDF của Cloudinary
+      if (publicId) {
+        const { cloudinary } = require('../config/cloudinary');
+        downloadUrl = cloudinary.url(publicId, { sign_url: true, resource_type: 'image', format: 'pdf' });
+      }
+      const response = await axios.get(downloadUrl, { responseType: 'arraybuffer' });
       buffer = Buffer.from(response.data);
     } else {
       buffer = fs.readFileSync(filePathOrUrl);
@@ -206,7 +212,7 @@ exports.aiReadUpload = async (req, res) => {
       aiResult = await callAIVision(req.file.path);
     } else if (req.file.mimetype === 'application/pdf') {
       // Dùng Text Mode
-      textContent = await extractTextFromPDF(req.file.path);
+      textContent = await extractTextFromPDF(req.file.path, req.file.filename);
       if (!textContent || textContent.trim().length < 5) {
         // PDF Scan: Fallback to Vision Mode by requesting the .jpg version from Cloudinary
         const imageUrl = req.file.path.replace(/\.pdf$/i, '.jpg');
