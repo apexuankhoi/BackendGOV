@@ -23,6 +23,7 @@ const userSchema = new mongoose.Schema({
   cccd: { type: String },
   dob: { type: String },
   address: { type: String },
+  phone: { type: String },
   
   createdAt: { type: Date, default: Date.now }
 });

@@ -5,7 +5,35 @@ const jwt = require('jsonwebtoken');
 const SECRET = process.env.JWT_SECRET || 'webgov_secret_key_12345';
 
 const axios = require('axios');
+const nodemailer = require('nodemailer');
 
+const otpStore = new Map();
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+});
+
+exports.sendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Thiếu email' });
+    const existing = await User.findOne({ email });
+    if (existing) return res.status(400).json({ message: 'Email đã được sử dụng' });
+    
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    otpStore.set(email, { otp, expires: Date.now() + 5 * 60000 });
+    
+    await transporter.sendMail({
+      from: `"Webgov Đắk Lắk" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Mã xác thực Đăng ký tài khoản',
+      html: `<div style="font-family: Arial, sans-serif; padding: 20px;"><h2>Mã xác thực tài khoản</h2><p>Mã xác thực của bạn là: <b style="font-size:24px;color:#1D4ED8;">${otp}</b></p><p>Mã này có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p></div>`
+    });
+    res.json({ message: 'Đã gửi mã xác thực' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi gửi email', error: err.message });
+  }
+};
 exports.ekycCitizen = async (req, res) => {
   try {
     const { frontImage, backImage } = req.body;
@@ -46,8 +74,14 @@ exports.ekycCitizen = async (req, res) => {
 
 exports.register = async (req, res) => {
   try {
-    const { username, email, password, role, province, district, commune, theNganhImage, cccd, dob, address } = req.body;
+    const { username, email, password, role, province, district, commune, theNganhImage, cccd, dob, address, phone, otp } = req.body;
     if (await User.findOne({ email })) return res.status(400).json({ message: 'Email đã tồn tại' });
+    
+    if (!otp) return res.status(400).json({ message: 'Vui lòng nhập mã xác thực OTP' });
+    const stored = otpStore.get(email);
+    if (!stored || stored.otp !== otp || Date.now() > stored.expires) {
+      return res.status(400).json({ message: 'Mã xác thực không hợp lệ hoặc đã hết hạn' });
+    }
 
     // Logic kiểm duyệt Thẻ Ngành cho Cán bộ bằng AI
     if (role === 'COMMUNE_ADMIN' || role === 'PROVINCE_ADMIN') {
@@ -78,6 +112,8 @@ exports.register = async (req, res) => {
       }
     }
 
+    otpStore.delete(email);
+
     const hashed = await bcrypt.hash(password, 10);
     await User.create({ 
       username, 
@@ -85,7 +121,7 @@ exports.register = async (req, res) => {
       password: hashed, 
       role: role || 'CITIZEN', 
       locationContext: { province, district, commune },
-      cccd, dob, address
+      cccd, dob, address, phone
     });
     res.status(201).json({ message: 'Đăng ký thành công' });
   } catch (err) {
