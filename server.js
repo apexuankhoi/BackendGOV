@@ -23,6 +23,9 @@ const activityLogRoutes = require('./routes/activityLog');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Cho phép Express đọc đúng IP khi deploy phía sau Reverse Proxy (Nginx, Vercel, Heroku...)
+app.set('trust proxy', 1);
+
 // Rate limiting (Tối đa 500 requests / 15 phút / IP)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
