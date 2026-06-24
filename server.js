@@ -129,4 +129,8 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running correctly.' });
 });
 
+// Khởi tạo Cron Job
+const { initCron } = require('./utils/cron');
+initCron();
+
 

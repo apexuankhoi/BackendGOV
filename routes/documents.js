@@ -31,9 +31,10 @@ router.put('/:id', authMiddleware, checkStaff, documentController.updateDocument
 router.delete('/:id', authMiddleware, checkAdmin, documentController.deleteDocument);
 
 // === AI ===
+router.get('/ai-report', authMiddleware, checkStaff, aiDocController.aiGenerateReport);
+router.get('/ai-deadline-alerts', authMiddleware, checkStaff, aiDocController.getDeadlineAlerts);
 router.post('/ai-upload', authMiddleware, checkStaff, uploadCloudinary.single('file'), aiDocController.aiReadUpload);
 router.post('/ai-create-tasks', authMiddleware, checkStaff, aiDocController.aiCreateTasks);
 router.post('/:id/ai-read', authMiddleware, checkStaff, aiDocController.aiReadDocument);
-router.get('/ai-report', authMiddleware, checkStaff, aiDocController.aiGenerateReport);
 
 module.exports = router;

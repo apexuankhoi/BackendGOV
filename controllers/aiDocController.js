@@ -290,50 +290,114 @@ exports.aiCreateTasks = async (req, res) => {
   }
 };
 
-// API: AI Báo cáo (Tự viết Báo cáo công tác tháng)
+// API: AI Báo cáo (Tự viết Báo cáo công tác - có chọn khoảng thời gian)
 exports.aiGenerateReport = async (req, res) => {
   try {
-    // Truy xuất số lượng văn bản và công việc trong tháng này
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const docs = await Document.countDocuments({ createdAt: { $gte: startOfMonth } });
-    const tasksTotal = await Task.countDocuments({ createdAt: { $gte: startOfMonth } });
-    const tasksDone = await Task.countDocuments({ createdAt: { $gte: startOfMonth }, status: 'DONE' });
-    const tasksList = await Task.find({ createdAt: { $gte: startOfMonth } }).limit(20);
+    const { from, to } = req.query;
 
-    const tasksString = tasksList.map(t => `- [${t.status}] ${t.title}`).join('\n');
+    let startDate, endDate, periodLabel;
+    if (from && to) {
+      startDate = new Date(from);
+      endDate   = new Date(to);
+      endDate.setHours(23, 59, 59, 999);
+      periodLabel = `${new Date(from).toLocaleDateString('vi-VN')} đến ${new Date(to).toLocaleDateString('vi-VN')}`;
+    } else {
+      startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+      endDate   = new Date();
+      periodLabel = `Tháng ${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
+    }
 
-    const prompt = `Bạn là Cán bộ Tham mưu Công an nhân dân/UBND xuất sắc. Hãy soạn thảo nội dung "Báo cáo công tác tháng" dựa trên các số liệu thực tế sau:
-- Tổng số văn bản đã tiếp nhận/xử lý trong tháng: ${docs}
-- Tổng số công việc đã tạo: ${tasksTotal} (Đã hoàn thành: ${tasksDone}, Tỷ lệ: ${tasksTotal ? Math.round(tasksDone/tasksTotal*100) : 0}%)
-- Các công việc tiêu biểu (tối đa 20):
-${tasksString}
+    const filter = { createdAt: { $gte: startDate, $lte: endDate } };
 
-Yêu cầu Báo cáo phải gồm các phần (Trình bày bằng Markdown định dạng đẹp, sử dụng đúng văn phong Báo cáo hành chính nhà nước/CAND):
-1. Đánh giá tình hình chung
-2. Kết quả đạt được (số liệu cụ thể)
-3. Tồn tại, hạn chế (nếu tỷ lệ hoàn thành thấp)
-4. Phương hướng, nhiệm vụ trọng tâm tháng tới
-5. Đề xuất, kiến nghị.`;
+    const docsIncoming = await Document.countDocuments({ ...filter, type: 'INCOMING' });
+    const docsOutgoing = await Document.countDocuments({ ...filter, type: 'OUTGOING' });
+    const docsTotal    = docsIncoming + docsOutgoing;
+    const tasksTotal   = await Task.countDocuments(filter);
+    const tasksDone    = await Task.countDocuments({ ...filter, status: 'DONE' });
+    const tasksOverdue = await Task.countDocuments({ ...filter, status: 'OVERDUE' });
+    const tasksInProg  = await Task.countDocuments({ ...filter, status: 'IN_PROGRESS' });
+
+    const docList = await Document.find(filter).sort({ createdAt: -1 }).limit(15)
+      .select('documentNumber issuingAgency summary category urgency status type');
+    const docListStr = docList.map(d =>
+      `- [${d.type === 'INCOMING' ? 'Đến' : 'Đi'}] Số ${d.documentNumber || '?'} | ${d.issuingAgency || '?'} | ${d.summary || '?'} | ${d.urgency || 'Thường'} | ${d.status}`
+    ).join('\n');
+
+    const tasksList = await Task.find(filter).sort({ createdAt: -1 }).limit(20).select('title status priority');
+    const tasksStr  = tasksList.map(t => `- [${t.status}] ${t.title} (${t.priority || '?'})`).join('\n');
+
+    const prompt = `Bạn là Cán bộ Tham mưu Công an nhân dân/UBND cấp xã dày dặn kinh nghiệm. 
+Hãy soạn thảo "Báo cáo công tác" cho kỳ ${periodLabel}, dựa trên số liệu thực tế sau (KHÔNG bịa đặt):
+
+=== SỐ LIỆU VĂN BẢN ===
+- Văn bản đến: ${docsIncoming}
+- Văn bản đi: ${docsOutgoing}
+- Tổng cộng: ${docsTotal}
+
+=== SỐ LIỆU CÔNG VIỆC ===
+- Tổng: ${tasksTotal} | Hoàn thành: ${tasksDone} (${tasksTotal ? Math.round(tasksDone/tasksTotal*100) : 0}%) | Đang thực hiện: ${tasksInProg} | Quá hạn: ${tasksOverdue}
+
+=== VĂN BẢN TIÊU BIỂU ===
+${docListStr || 'Không có'}
+
+=== CÔNG VIỆC TIÊU BIỂU ===
+${tasksStr || 'Không có'}
+
+Hãy viết báo cáo theo cấu trúc Markdown đẹp, đúng văn phong hành chính nhà nước/CAND:
+
+# BÁO CÁO CÔNG TÁC ${periodLabel.toUpperCase()}
+
+**I. TÌNH HÌNH CHUNG**
+**II. KẾT QUẢ ĐẠT ĐƯỢC**
+**III. TỒN TẠI, HẠN CHẾ**
+**IV. PHƯƠNG HƯỚNG NHIỆM VỤ KỲ TỚI**
+**V. ĐỀ XUẤT, KIẾN NGHỊ**`;
 
     const token = process.env.OPENAI_API_KEY;
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       messages: [{ role: 'user', content: prompt }],
       model: 'gpt-4o-mini',
-      temperature: 0.5,
-    }, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+      temperature: 0.4,
+      max_tokens: 2500,
+    }, { headers: { 'Authorization': `Bearer ${token}` } });
 
     const reportContent = response.data.choices[0].message.content;
 
     await ActivityLog.create({
       user: req.user.userId,
       action: 'AI_GENERATE_REPORT',
-      target: `Báo cáo tháng ${new Date().getMonth() + 1}`,
-      details: 'AI tổng hợp dữ liệu thành công.'
+      target: `Báo cáo ${periodLabel}`,
+      details: `${docsTotal} văn bản, ${tasksTotal} công việc`
     });
 
-    res.json({ message: 'Tạo báo cáo thành công', report: reportContent });
+    res.json({
+      message: 'Tạo báo cáo thành công',
+      report: reportContent,
+      stats: { docsIncoming, docsOutgoing, docsTotal, tasksTotal, tasksDone, tasksOverdue, tasksInProg, periodLabel }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// API: Lấy văn bản sắp đến hạn / quá hạn
+exports.getDeadlineAlerts = async (req, res) => {
+  try {
+    const now     = new Date();
+    const in3days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const alerts  = await Document.find({
+      deadline: { $gte: now, $lte: in3days },
+      status: { $nin: ['Hoàn thành'] }
+    }).sort({ deadline: 1 }).limit(20)
+      .select('documentNumber summary deadline status urgency issuingAgency type');
+
+    const overdue = await Document.find({
+      deadline: { $lt: now },
+      status: { $nin: ['Hoàn thành'] }
+    }).sort({ deadline: -1 }).limit(20)
+      .select('documentNumber summary deadline status urgency issuingAgency type');
+
+    res.json({ alerts, overdue, total: alerts.length + overdue.length });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
