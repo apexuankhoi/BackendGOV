@@ -72,9 +72,8 @@ const documentSchema = new mongoose.Schema({
 });
 
 // Tự cập nhật updatedAt
-documentSchema.pre('save', function(next) {
+documentSchema.pre('save', async function() {
   this.updatedAt = new Date();
-  next();
 });
 
 module.exports = mongoose.model('Document', documentSchema);

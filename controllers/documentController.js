@@ -85,7 +85,7 @@ exports.createDocument = async (req, res) => {
 
     res.status(201).json({ message: 'Tạo văn bản thành công', document: doc });
   } catch (err) {
-    res.status(500).json({ message: 'Lỗi server: ' + err.message, error: err.message });
+    res.status(500).json({ message: 'Lỗi server: ' + err.stack });
   }
 };
 
