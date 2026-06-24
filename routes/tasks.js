@@ -16,11 +16,14 @@ const checkAdmin = (req, res, next) => {
   next();
 };
 
+const aiDocController = require('../controllers/aiDocController');
+
 router.get('/', authMiddleware, checkStaff, taskController.getTasks);
 router.get('/overdue', authMiddleware, checkStaff, taskController.getOverdueTasks);
 router.get('/stats', authMiddleware, checkStaff, taskController.getTaskStats);
 router.post('/', authMiddleware, checkStaff, taskController.createTask);
 router.put('/:id', authMiddleware, checkStaff, taskController.updateTask);
 router.delete('/:id', authMiddleware, checkAdmin, taskController.deleteTask);
+router.post('/:id/ai-solve', authMiddleware, checkStaff, aiDocController.aiSolveTask);
 
 module.exports = router;

@@ -290,6 +290,52 @@ exports.aiCreateTasks = async (req, res) => {
   }
 };
 
+// API: AI giải quyết công việc
+exports.aiSolveTask = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const task = await Task.findById(id).populate('sourceDocument');
+    if (!task) return res.status(404).json({ message: 'Không tìm thấy công việc' });
+
+    let sourceContext = '';
+    if (task.sourceDocument && task.sourceDocument.ocrContent) {
+      sourceContext = `\n\nĐây là nội dung văn bản gốc liên quan:\n"""\n${task.sourceDocument.ocrContent.substring(0, 5000)}\n"""`;
+    }
+
+    const token = process.env.OPENAI_API_KEY;
+    if (!token) return res.status(500).json({ message: 'Chưa cấu hình OPENAI_API_KEY' });
+
+    const prompt = `Bạn là Chuyên viên xuất sắc trong cơ quan nhà nước.
+Nhiệm vụ của bạn là GIẢI QUYẾT công việc sau đây một cách chi tiết, chuyên nghiệp.
+Tên công việc: "${task.title}"
+Mô tả công việc: "${task.description || 'Không có'}"${sourceContext}
+
+Dựa vào các thông tin trên, hãy ĐÓNG VAI người thực hiện và viết ra KẾT QUẢ giải quyết công việc.
+Nếu yêu cầu lập kế hoạch/báo cáo/công văn trả lời, hãy SOẠN THẢO SẴN toàn bộ nội dung văn bản đó.
+Nếu yêu cầu xử lý tình huống, hãy đưa ra giải pháp từng bước.
+Định dạng bằng Markdown. Không cần chào hỏi, đi thẳng vào nội dung công việc.`;
+
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1500,
+      temperature: 0.7
+    }, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    const aiSolution = response.data.choices[0].message.content.trim();
+    
+    task.aiSolution = aiSolution;
+    await task.save();
+
+    res.json({ message: 'AI đã giải quyết xong', aiSolution });
+  } catch (err) {
+    console.error('Lỗi AI Solve Task:', err.response?.data || err.message);
+    res.status(500).json({ message: 'Lỗi AI giải quyết công việc', error: err.message });
+  }
+};
+
 // API: AI Báo cáo (Tự viết Báo cáo công tác - có chọn khoảng thời gian)
 exports.aiGenerateReport = async (req, res) => {
   try {

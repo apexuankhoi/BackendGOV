@@ -30,6 +30,7 @@ const taskSchema = new mongoose.Schema({
   
   // AI
   aiGenerated: { type: Boolean, default: false },         // Được AI tạo?
+  aiSolution: { type: String, default: '' },              // AI giải quyết hộ
   
   // Metadata
   notes: { type: String, default: '' },
