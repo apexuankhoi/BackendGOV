@@ -137,7 +137,7 @@ exports.login = async (req, res) => {
     if (!user) return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
-    const token = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '15m' }); // Token sống 15 phút
+    const token = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '7d' });
     const refreshToken = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '7d' }); // Refresh sống 7 ngày
     res.json({ token, refreshToken, role: user.role, username: user.username });
   } catch (err) {
