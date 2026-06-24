@@ -13,7 +13,6 @@ const aiRoutes = require('./routes/ai');
 const teamRoutes = require('./routes/teams');
 const userRoutes = require('./routes/users');
 const newsRoutes = require('./routes/news');
-const configRoutes = require('./routes/config');
 
 // eOffice routes
 const documentRoutes = require('./routes/documents');
@@ -118,7 +117,6 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/news', newsRoutes);
-app.use('/api/config', configRoutes);
 
 // eOffice Routes
 app.use('/api/documents', documentRoutes);
