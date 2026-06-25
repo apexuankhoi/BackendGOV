@@ -22,10 +22,20 @@ const checkAdmin = (req, res, next) => {
   next();
 };
 
-// === AI ===
+// Wrapper bắt lỗi Cloudinary Single Upload cho AI
+const handleSingleUpload = (req, res, next) => {
+  uploadCloudinary.single('file')(req, res, function (err) {
+    if (err) {
+      console.error('Cloudinary SingleUpload Error:', err);
+      return res.status(500).json({ message: 'Lỗi upload Cloudinary: ' + err.message });
+    }
+    next();
+  });
+};
+
 router.get('/ai-report', authMiddleware, checkStaff, aiDocController.aiGenerateReport);
 router.get('/ai-deadline-alerts', authMiddleware, checkStaff, aiDocController.getDeadlineAlerts);
-router.post('/ai-upload', authMiddleware, checkStaff, uploadCloudinary.single('file'), aiDocController.aiReadUpload);
+router.post('/ai-upload', authMiddleware, checkStaff, handleSingleUpload, aiDocController.aiReadUpload);
 router.post('/ai-create-tasks', authMiddleware, checkStaff, aiDocController.aiCreateTasks);
 
 // === AI Report V2 ===
@@ -37,7 +47,19 @@ router.post('/ai-report-v2/generate', authMiddleware, checkStaff, aiReportV2.gen
 router.get('/stats', authMiddleware, checkStaff, documentController.getStats);
 router.get('/child-agencies-stats', authMiddleware, checkStaff, documentController.getChildAgenciesStats);
 router.get('/', authMiddleware, checkStaff, documentController.getDocuments);
-router.post('/', authMiddleware, checkStaff, uploadCloudinary.array('files', 5), documentController.createDocument);
+
+// Wrapper bắt lỗi Cloudinary Timeout
+const handleMultiUpload = (req, res, next) => {
+  uploadCloudinary.array('files', 5)(req, res, function (err) {
+    if (err) {
+      console.error('Cloudinary MultiUpload Error:', err);
+      return res.status(500).json({ message: 'Lỗi upload Cloudinary: ' + err.message });
+    }
+    next();
+  });
+};
+
+router.post('/', authMiddleware, checkStaff, handleMultiUpload, documentController.createDocument);
 
 // Route động phải đặt dưới
 router.get('/:id', authMiddleware, checkStaff, documentController.getDocument);
