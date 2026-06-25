@@ -30,12 +30,11 @@ mongoose.connect('mongodb://localhost:27017/webgov').then(async () => {
   
   // Create province agencies
   const daklak = await Agency.create({ name: 'Tỉnh Đắk Lắk', level: 'PROVINCE' });
-  const phuyen = await Agency.create({ name: 'Tỉnh Phú Yên', level: 'PROVINCE' });
   
   const docs = communes.map(c => ({
     name: c,
     level: 'COMMUNE',
-    parentAgency: c.startsWith('Đoàn') ? phuyen._id : daklak._id
+    parentAgency: daklak._id
   }));
   
   await Agency.insertMany(docs);
