@@ -12,10 +12,11 @@ cloudinary.config({
 // Cấu hình Storage cho Multer
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
-    folder: process.env.CLOUDINARY_FOLDER || 'webgov_daklak', // Tên thư mục trên Cloudinary
-    allowed_formats: ['jpg', 'png', 'jpeg', 'pdf', 'doc', 'docx'],
-    resource_type: 'auto', // Cần thiết để upload doc, docx, pdf
+  params: async (req, file) => {
+    return {
+      folder: process.env.CLOUDINARY_FOLDER || 'webgov_daklak',
+      resource_type: 'raw'
+    };
   },
 });
 

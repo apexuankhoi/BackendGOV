@@ -12,8 +12,19 @@ const checkAgency = (req, res, next) => {
 
 router.get('/', authMiddleware, checkAgency, driveController.getFiles);
 router.post('/folder', authMiddleware, checkAgency, driveController.createFolder);
-router.post('/upload', authMiddleware, checkAgency, uploadCloudinary.single('file'), driveController.uploadFile);
-router.post('/:id/new-version', authMiddleware, checkAgency, uploadCloudinary.single('file'), driveController.uploadNewVersion);
+// Wrapper để bắt lỗi multer (đặc biệt là Cloudinary)
+const handleUpload = (req, res, next) => {
+  uploadCloudinary.single('file')(req, res, function (err) {
+    if (err) {
+      console.error('Multer/Cloudinary Error:', err);
+      return res.status(500).json({ message: 'Lỗi tải lên Cloudinary: ' + err.message });
+    }
+    next();
+  });
+};
+
+router.post('/upload', authMiddleware, checkAgency, handleUpload, driveController.uploadFile);
+router.post('/:id/new-version', authMiddleware, checkAgency, handleUpload, driveController.uploadNewVersion);
 router.delete('/:id', authMiddleware, checkAgency, driveController.deleteFile);
 
 module.exports = router;
