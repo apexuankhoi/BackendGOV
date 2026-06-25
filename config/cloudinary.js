@@ -14,9 +14,18 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
+    // Lấy tên file gốc (Bỏ dấu tiếng Việt, thay khoảng trắng thành gạch dưới để Cloudinary không lỗi)
+    let originalName = file.originalname || 'file_khong_ten';
+    // Chuyển tiếng Việt không dấu và thay ký tự đặc biệt
+    originalName = originalName
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9.-]/g, "_");
+
     return {
       folder: process.env.CLOUDINARY_FOLDER || 'webgov_daklak',
-      resource_type: 'raw'
+      resource_type: 'raw',
+      public_id: `${Date.now()}_${originalName}` // Thêm Date.now để không bị trùng tên file
     };
   },
 });
