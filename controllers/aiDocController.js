@@ -18,8 +18,11 @@ async function extractTextFromDocx(filePathOrUrl) {
     const result = await mammoth.extractRawText({ buffer });
     return result.value || '';
   } catch (err) {
+    if (err.message.includes('Can\'t find end of central directory') || filePathOrUrl.endsWith('.doc')) {
+      throw new Error('AI hiện tại chỉ hỗ trợ định dạng Word mới (.docx). Vui lòng lưu lại file dưới dạng .docx rồi thử lại.');
+    }
     console.error('Docx parse error:', err.message);
-    return '';
+    throw new Error('Không thể đọc nội dung file Word. Vui lòng kiểm tra lại file.');
   }
 }
 
@@ -142,7 +145,11 @@ exports.aiReadDocument = async (req, res) => {
         if (att.mimeType === 'application/pdf') {
           textContent += await extractTextFromPDF(att.filePath);
         } else if (att.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || att.mimeType === 'application/msword') {
-          textContent += await extractTextFromDocx(att.filePath);
+          try {
+            textContent += await extractTextFromDocx(att.filePath);
+          } catch (e) {
+            return res.status(400).json({ message: e.message });
+          }
         } else if (att.mimeType.startsWith('image/')) {
           imageUrl = att.filePath; // Lấy URL Cloudinary của ảnh
           break; // Ưu tiên đọc ảnh bằng Vision
@@ -230,7 +237,11 @@ ${textContent.substring(0, 4000)}`;
       }
     } else if (req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || req.file.mimetype === 'application/msword') {
       // Dùng Text Mode cho Word
-      textContent = await extractTextFromDocx(req.file.path);
+      try {
+        textContent = await extractTextFromDocx(req.file.path);
+      } catch (e) {
+        return res.status(400).json({ message: e.message });
+      }
       if (!textContent || textContent.trim().length < 5) {
         return res.status(400).json({ message: 'File Word không có nội dung text hợp lệ.' });
       }
@@ -278,6 +289,7 @@ exports.aiCreateTasks = async (req, res) => {
       const task = await Task.create({
         title: t.title || t,
         assignedBy: req.user.userId,
+        agencyId: req.user.agencyId || null,
         priority: 'Trung bình',
         sourceDocument: documentId || undefined,
         aiGenerated: true

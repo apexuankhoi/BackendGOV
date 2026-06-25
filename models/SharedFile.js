@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 
 const fileVersionSchema = new mongoose.Schema({
   fileName: String,
@@ -24,7 +24,8 @@ const sharedFileSchema = new mongoose.Schema({
   
   // Nguoi tao & Co quan so huu
   uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  agencyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agency', required: true },
+  agencyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agency', default: null }, // Optional for citizens
+  isPersonal: { type: Boolean, default: false }, // Danh dau Kho du lieu ca nhan
   
   // Thu muc cha (null = thu muc goc)
   parentId: { type: mongoose.Schema.Types.ObjectId, ref: 'SharedFile', default: null },

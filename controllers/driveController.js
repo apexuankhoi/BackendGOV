@@ -1,14 +1,23 @@
-﻿const SharedFile = require('../models/SharedFile');
+const SharedFile = require('../models/SharedFile');
 const fs = require('fs');
 
 // Lấy danh sách file/folder trong cơ quan
 exports.getFiles = async (req, res) => {
   try {
-    const { agencyId } = req.user;
-    if (!agencyId) return res.status(403).json({ message: 'Bạn chưa thuộc cơ quan nào' });
-    
+    const isPersonal = req.query.isPersonal === 'true';
     const parentId = req.query.parentId || null;
-    const files = await SharedFile.find({ agencyId, parentId })
+    
+    let filter = { parentId };
+    if (isPersonal) {
+      filter.uploadedBy = req.user.userId;
+      filter.isPersonal = true;
+    } else {
+      if (!req.user.agencyId) return res.status(403).json({ message: 'Bạn chưa thuộc cơ quan nào để xem kho chung' });
+      filter.agencyId = req.user.agencyId;
+      filter.isPersonal = false;
+    }
+
+    const files = await SharedFile.find(filter)
       .populate('uploadedBy', 'username role')
       .sort({ isFolder: -1, updatedAt: -1 });
       
@@ -21,13 +30,14 @@ exports.getFiles = async (req, res) => {
 // Tạo thư mục mới
 exports.createFolder = async (req, res) => {
   try {
-    const { title, parentId } = req.body;
+    const { title, parentId, isPersonal } = req.body;
     const folder = await SharedFile.create({
       title,
       isFolder: true,
       parentId: parentId || null,
-      agencyId: req.user.agencyId,
-      uploadedBy: req.user.userId
+      agencyId: req.user.agencyId || null,
+      uploadedBy: req.user.userId,
+      isPersonal: isPersonal === true || isPersonal === 'true'
     });
     res.status(201).json(folder);
   } catch (err) {
@@ -38,15 +48,16 @@ exports.createFolder = async (req, res) => {
 // Upload file mới
 exports.uploadFile = async (req, res) => {
   try {
-    const { parentId } = req.body;
+    const { parentId, isPersonal } = req.body;
     if (!req.file) return res.status(400).json({ message: 'Vui lòng chọn file' });
     
     const newFile = await SharedFile.create({
       title: req.file.originalname,
       isFolder: false,
       parentId: parentId || null,
-      agencyId: req.user.agencyId,
+      agencyId: req.user.agencyId || null,
       uploadedBy: req.user.userId,
+      isPersonal: isPersonal === true || isPersonal === 'true',
       currentFile: {
         fileName: req.file.originalname,
         filePath: req.file.path,
