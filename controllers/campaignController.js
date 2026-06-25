@@ -15,9 +15,21 @@ exports.submitReport = async (req, res) => {
       return res.status(403).json({ message: 'Tài khoản không thuộc cơ quan/đơn vị nào.' });
     }
 
-    // Chuẩn hóa ngày về 00:00:00 (để mỗi ngày chỉ có 1 record)
-    const dateObj = new Date(reportDate || Date.now());
+    // 1. Kiểm tra khung giờ (18:00 - 20:00)
+    const currentHour = new Date().getHours();
+    if (currentHour < 18 || currentHour >= 20) {
+      return res.status(403).json({ message: 'Hệ thống chỉ mở cổng nhận báo cáo chiến dịch từ 18:00 đến 20:00 hằng ngày.' });
+    }
+
+    // 2. Chuẩn hóa ngày hiện tại về 00:00:00
+    const dateObj = new Date();
     dateObj.setHours(0, 0, 0, 0);
+
+    // 3. Kiểm tra xem đã nộp báo cáo hôm nay chưa
+    const existingReport = await CampaignReport.findOne({ agencyId, reportDate: dateObj });
+    if (existingReport) {
+      return res.status(403).json({ message: 'Bạn đã nộp báo cáo chiến dịch cho ngày hôm nay rồi. Vui lòng quay lại vào 18h00 ngày mai!' });
+    }
 
     const updateData = {
       agencyId,
@@ -40,11 +52,7 @@ exports.submitReport = async (req, res) => {
       updatedAt: Date.now()
     };
 
-    const report = await CampaignReport.findOneAndUpdate(
-      { agencyId, reportDate: dateObj },
-      { $set: updateData },
-      { new: true, upsert: true }
-    );
+    const report = await CampaignReport.create(updateData);
 
     res.json({ message: 'Lưu báo cáo thành công', report });
   } catch (error) {
@@ -100,6 +108,25 @@ exports.getGlobalStats = async (req, res) => {
     });
   } catch (error) {
     console.error('Error getGlobalStats:', error);
+    res.status(500).json({ message: 'Lỗi server' });
+  }
+};
+
+// Dành cho cấp Tỉnh xem báo cáo của tất cả các xã
+exports.getAllReports = async (req, res) => {
+  try {
+    const { date } = req.query;
+    const dateObj = new Date(date || Date.now());
+    dateObj.setHours(0, 0, 0, 0);
+
+    const reports = await CampaignReport.find({ reportDate: dateObj })
+      .populate('agencyId', 'name')
+      .populate('reporterId', 'username')
+      .sort({ updatedAt: -1 });
+
+    res.json(reports);
+  } catch (error) {
+    console.error('Error getAllReports:', error);
     res.status(500).json({ message: 'Lỗi server' });
   }
 };

@@ -10,4 +10,7 @@ router.get('/stats', campaignController.getGlobalStats);
 router.post('/report', authMiddleware, campaignController.submitReport);
 router.get('/report', authMiddleware, campaignController.getMyReport);
 
+// Dành cho cấp Tỉnh xem
+router.get('/all-reports', authMiddleware, campaignController.getAllReports);
+
 module.exports = router;
