@@ -385,6 +385,7 @@ exports.aiGenerateReport = async (req, res) => {
     }
 
     const filter = { createdAt: { $gte: startDate, $lte: endDate } };
+    if (req.user.agencyId) filter.agencyId = req.user.agencyId;
 
     const docsIncoming = await Document.countDocuments({ ...filter, type: 'INCOMING' });
     const docsOutgoing = await Document.countDocuments({ ...filter, type: 'OUTGOING' });
@@ -462,13 +463,17 @@ exports.getDeadlineAlerts = async (req, res) => {
   try {
     const now     = new Date();
     const in3days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const scope = req.user.agencyId ? { agencyId: req.user.agencyId } : {};
+
     const alerts  = await Document.find({
+      ...scope,
       deadline: { $gte: now, $lte: in3days },
       status: { $nin: ['Hoàn thành'] }
     }).sort({ deadline: 1 }).limit(20)
       .select('documentNumber summary deadline status urgency issuingAgency type');
 
     const overdue = await Document.find({
+      ...scope,
       deadline: { $lt: now },
       status: { $nin: ['Hoàn thành'] }
     }).sort({ deadline: -1 }).limit(20)

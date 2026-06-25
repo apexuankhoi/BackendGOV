@@ -21,6 +21,7 @@ exports.createOutgoingFromAI = async (req, res) => {
     const latestFile = task.aiGeneratedFiles[task.aiGeneratedFiles.length - 1];
     const outgoing = await Document.create({
       type: 'OUTGOING',
+      agencyId: req.user.agencyId || null,
       summary: 'Van ban phan hoi - ' + task.title,
       category: 'Cong van',
       status: 'Cho xu ly',
@@ -140,7 +141,8 @@ exports.aiSynthesizeMultiple = async (req, res) => {
     if (!documentIds || documentIds.length < 2) {
       return res.status(400).json({ message: 'Can chon it nhat 2 van ban' });
     }
-    const docs = await Document.find({ _id: { $in: documentIds } });
+    const scope = req.user.agencyId ? { agencyId: req.user.agencyId } : {};
+    const docs = await Document.find({ _id: { $in: documentIds }, ...scope });
     if (docs.length < 2) return res.status(400).json({ message: 'Khong tim thay du van ban' });
     const token = process.env.OPENAI_API_KEY;
     if (!token) return res.status(500).json({ message: 'Chua cau hinh OPENAI_API_KEY' });
@@ -201,18 +203,19 @@ exports.aiNaturalQuery = async (req, res) => {
     const token = process.env.OPENAI_API_KEY;
     if (!token) return res.status(500).json({ message: 'Chua cau hinh OPENAI_API_KEY' });
 
-    // Lay thong ke nhanh de AI co context
-    const totalIncoming = await Document.countDocuments({ type: 'INCOMING' });
-    const totalOutgoing = await Document.countDocuments({ type: 'OUTGOING' });
-    const pendingDocs = await Document.countDocuments({ status: 'Cho xu ly' });
-    const overdueDocs = await Document.countDocuments({ status: 'Qua han' });
-    const totalTasks = await Task.countDocuments();
-    const doneTasks = await Task.countDocuments({ status: 'Hoan thanh' });
-    const overdueTasks = await Task.countDocuments({ status: 'Qua han' });
+    // Lay thong ke nhanh de AI co context (SCOPED theo co quan)
+    const scope = req.user.agencyId ? { agencyId: req.user.agencyId } : {};
+    const totalIncoming = await Document.countDocuments({ ...scope, type: 'INCOMING' });
+    const totalOutgoing = await Document.countDocuments({ ...scope, type: 'OUTGOING' });
+    const pendingDocs = await Document.countDocuments({ ...scope, status: 'Cho xu ly' });
+    const overdueDocs = await Document.countDocuments({ ...scope, status: 'Qua han' });
+    const totalTasks = await Task.countDocuments(scope);
+    const doneTasks = await Task.countDocuments({ ...scope, status: 'Hoan thanh' });
+    const overdueTasks = await Task.countDocuments({ ...scope, status: 'Qua han' });
 
-    // Lay 20 van ban gan nhat de AI co du lieu
-    const recentDocs = await Document.find().sort({ createdAt: -1 }).limit(20).select('documentNumber issuingAgency summary category status urgency deadline createdAt type field');
-    const recentTasks = await Task.find().sort({ createdAt: -1 }).limit(15).select('title status priority deadline aiGenerated createdAt');
+    // Lay 20 van ban gan nhat cua CO QUAN
+    const recentDocs = await Document.find(scope).sort({ createdAt: -1 }).limit(20).select('documentNumber issuingAgency summary category status urgency deadline createdAt type field');
+    const recentTasks = await Task.find(scope).sort({ createdAt: -1 }).limit(15).select('title status priority deadline aiGenerated createdAt');
 
     const prompt = `Ban la AI tro ly tra cuu du lieu cua he thong E-Office.
 
@@ -260,7 +263,10 @@ Neu khong du du lieu de tra loi chinh xac, hay noi ro.`;
 // Thong ke KPI cua tung can bo
 exports.getStaffKPI = async (req, res) => {
   try {
-    const users = await User.find({ role: { $ne: 'CITIZEN' } }).select('username role email');
+    // KPI chỉ tính cho cán bộ cùng cơ quan
+    const userFilter = { role: { $ne: 'CITIZEN' } };
+    if (req.user.agencyId) userFilter.agencyId = req.user.agencyId;
+    const users = await User.find(userFilter).select('username role email');
     const kpiData = [];
 
     for (const user of users) {

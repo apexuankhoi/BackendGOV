@@ -6,6 +6,9 @@ exports.getDocuments = async (req, res) => {
   try {
     const { type, status, urgency, category, search, page = 1, limit = 20 } = req.query;
     const query = {};
+
+    // Phân tách dữ liệu theo cơ quan: mỗi xã chỉ thấy VB của mình
+    if (req.user.agencyId) query.agencyId = req.user.agencyId;
     
     if (type) query.type = type;
     if (status) query.status = status;
@@ -42,7 +45,10 @@ const QRCode = require('qrcode');
 
 exports.getDocument = async (req, res) => {
   try {
-    const doc = await Document.findById(req.params.id)
+    const findQuery = { _id: req.params.id };
+    if (req.user.agencyId) findQuery.agencyId = req.user.agencyId;
+
+    const doc = await Document.findOne(findQuery)
       .populate('createdBy', 'username email')
       .populate('assignedTo', 'username email');
     if (!doc) return res.status(404).json({ message: 'Không tìm thấy văn bản' });
@@ -60,7 +66,7 @@ exports.getDocument = async (req, res) => {
 // Tạo văn bản mới
 exports.createDocument = async (req, res) => {
   try {
-    const data = { ...req.body, createdBy: req.user.userId };
+    const data = { ...req.body, createdBy: req.user.userId, agencyId: req.user.agencyId || null };
     
     // Xử lý file đính kèm
     if (req.files && req.files.length > 0) {
@@ -92,7 +98,9 @@ exports.createDocument = async (req, res) => {
 // Cập nhật văn bản
 exports.updateDocument = async (req, res) => {
   try {
-    const doc = await Document.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
+    const findQuery = { _id: req.params.id };
+    if (req.user.agencyId) findQuery.agencyId = req.user.agencyId;
+    const doc = await Document.findOneAndUpdate(findQuery, req.body, { returnDocument: 'after' });
     if (!doc) return res.status(404).json({ message: 'Không tìm thấy văn bản' });
 
     await ActivityLog.create({
@@ -111,7 +119,9 @@ exports.updateDocument = async (req, res) => {
 // Xóa văn bản
 exports.deleteDocument = async (req, res) => {
   try {
-    const doc = await Document.findByIdAndDelete(req.params.id);
+    const findQuery = { _id: req.params.id };
+    if (req.user.agencyId) findQuery.agencyId = req.user.agencyId;
+    const doc = await Document.findOneAndDelete(findQuery);
     if (!doc) return res.status(404).json({ message: 'Không tìm thấy văn bản' });
 
     await ActivityLog.create({
@@ -129,28 +139,37 @@ exports.deleteDocument = async (req, res) => {
 // Thống kê văn bản
 exports.getStats = async (req, res) => {
   try {
+    // Phân tách dữ liệu theo cơ quan
+    const scope = req.user.agencyId ? { agencyId: req.user.agencyId } : {};
+
     const [
       totalIncoming, totalOutgoing,
       pendingCount, overdueCount, completedCount,
       urgentCount,
       recentIncoming, recentOutgoing
     ] = await Promise.all([
-      Document.countDocuments({ type: 'INCOMING' }),
-      Document.countDocuments({ type: 'OUTGOING' }),
-      Document.countDocuments({ status: 'Chờ xử lý' }),
-      Document.countDocuments({ status: 'Quá hạn' }),
-      Document.countDocuments({ status: 'Hoàn thành' }),
-      Document.countDocuments({ urgency: { $in: ['Khẩn', 'Thượng khẩn', 'Hỏa tốc'] } }),
-      Document.find({ type: 'INCOMING' }).sort({ createdAt: -1 }).limit(5).populate('createdBy', 'username'),
-      Document.find({ type: 'OUTGOING' }).sort({ createdAt: -1 }).limit(5).populate('createdBy', 'username')
+      Document.countDocuments({ ...scope, type: 'INCOMING' }),
+      Document.countDocuments({ ...scope, type: 'OUTGOING' }),
+      Document.countDocuments({ ...scope, status: 'Chờ xử lý' }),
+      Document.countDocuments({ ...scope, status: 'Quá hạn' }),
+      Document.countDocuments({ ...scope, status: 'Hoàn thành' }),
+      Document.countDocuments({ ...scope, urgency: { $in: ['Khẩn', 'Thượng khẩn', 'Hỏa tốc'] } }),
+      Document.find({ ...scope, type: 'INCOMING' }).sort({ createdAt: -1 }).limit(5).populate('createdBy', 'username'),
+      Document.find({ ...scope, type: 'OUTGOING' }).sort({ createdAt: -1 }).limit(5).populate('createdBy', 'username')
     ]);
 
     // Thống kê theo tháng (6 tháng gần nhất)
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const matchStage = { createdAt: { $gte: sixMonthsAgo } };
+    if (req.user.agencyId) {
+      const mongoose = require('mongoose');
+      matchStage.agencyId = new mongoose.Types.ObjectId(req.user.agencyId);
+    }
     
     const monthlyStats = await Document.aggregate([
-      { $match: { createdAt: { $gte: sixMonthsAgo } } },
+      { $match: matchStage },
       {
         $group: {
           _id: { month: { $month: '$createdAt' }, year: { $year: '$createdAt' }, type: '$type' },

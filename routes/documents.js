@@ -28,6 +28,11 @@ router.get('/ai-deadline-alerts', authMiddleware, checkStaff, aiDocController.ge
 router.post('/ai-upload', authMiddleware, checkStaff, uploadCloudinary.single('file'), aiDocController.aiReadUpload);
 router.post('/ai-create-tasks', authMiddleware, checkStaff, aiDocController.aiCreateTasks);
 
+// === AI Report V2 ===
+const aiReportV2 = require('../controllers/aiReportV2Controller');
+router.get('/ai-report-v2/resources', authMiddleware, checkStaff, aiReportV2.getReportResources);
+router.post('/ai-report-v2/generate', authMiddleware, checkStaff, aiReportV2.generateReportV2);
+
 // === CRUD Văn bản ===
 router.get('/stats', authMiddleware, checkStaff, documentController.getStats);
 router.get('/child-agencies-stats', authMiddleware, checkStaff, documentController.getChildAgenciesStats);
