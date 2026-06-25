@@ -57,22 +57,34 @@ async function callAIText(prompt) {
   if (!token) return { error: 'Chưa cấu hình OPENAI_API_KEY.' };
 
   try {
-    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-      messages: [
-        {
-          role: 'system',
-          content: `Bạn là Cán bộ Tham mưu Công an nhân dân/UBND cấp xã dày dặn kinh nghiệm. 
+    let response;
+    let retries = 2;
+    while (retries > 0) {
+      try {
+        response = await axios.post('https://api.openai.com/v1/chat/completions', {
+          messages: [
+            {
+              role: 'system',
+              content: `Bạn là Cán bộ Tham mưu Công an nhân dân/UBND cấp xã dày dặn kinh nghiệm. 
 Nhiệm vụ của bạn là đọc nội dung văn bản và trích xuất thông tin, đề xuất hướng xử lý với văn phong hành chính nhà nước, trang trọng, chính xác. 
 Ví dụ: "Đề xuất đồng chí Trưởng Công an xã phân công CSKV rà soát...", "Kính báo cáo Thường trực Đảng ủy xem xét...".
 Luôn trả lời JSON thuần túy (không bọc trong \`\`\`json).`
-        },
-        { role: 'user', content: prompt }
-      ],
-      model: 'gpt-4o-mini',
-      temperature: 0.3,
-    }, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+            },
+            { role: 'user', content: prompt }
+          ],
+          model: 'gpt-4o-mini',
+          temperature: 0.3,
+        }, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          timeout: 60000
+        });
+        break; // Thành công thì thoát vòng lặp
+      } catch (e) {
+        retries--;
+        if (retries === 0) throw e;
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Đợi 1.5s rồi thử lại
+      }
+    }
 
     let text = response.data.choices[0].message.content.trim();
     // Parse JSON
@@ -90,12 +102,16 @@ async function callAIVision(imageUrl) {
   if (!token) return { error: 'Chưa cấu hình OPENAI_API_KEY.' };
 
   try {
-    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: `Bạn là Cán bộ Tham mưu Công an nhân dân/UBND cấp xã. Dưới đây là ảnh chụp/scan của một văn bản hành chính.
+    let response;
+    let retries = 2;
+    while (retries > 0) {
+      try {
+        response = await axios.post('https://api.openai.com/v1/chat/completions', {
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: `Bạn là Cán bộ Tham mưu Công an nhân dân/UBND cấp xã. Dưới đây là ảnh chụp/scan của một văn bản hành chính.
 Hãy đọc toàn bộ nội dung và trích xuất thành JSON thuần túy (không bọc trong \`\`\`json) với các trường:
 {
   "soVanBan": "số văn bản (VD: 125/KH-CAX)",
@@ -111,15 +127,23 @@ Hãy đọc toàn bộ nội dung và trích xuất thành JSON thuần túy (kh
   "deXuatXuLy": "Đề xuất xử lý văn bản này (dùng văn phong Cán bộ Tham mưu, vd: 'Đề xuất Trưởng CAX giao CSKV...')",
   "congViecCanLam": ["Danh sách 1-3 công việc cụ thể cần làm (mảng string)"]
 }` },
-            { type: 'image_url', image_url: { url: imageUrl } }
-          ]
-        }
-      ],
-      model: 'gpt-4o-mini',
-      max_tokens: 1500,
-    }, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+                { type: 'image_url', image_url: { url: imageUrl } }
+              ]
+            }
+          ],
+          model: 'gpt-4o-mini',
+          max_tokens: 1500,
+        }, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          timeout: 60000
+        });
+        break; // Thành công thì thoát vòng lặp
+      } catch (e) {
+        retries--;
+        if (retries === 0) throw e;
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Đợi 1.5s rồi thử lại
+      }
+    }
 
     let text = response.data.choices[0].message.content.trim();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
