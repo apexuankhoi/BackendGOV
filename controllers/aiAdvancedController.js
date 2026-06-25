@@ -19,32 +19,47 @@ exports.createOutgoingFromAI = async (req, res) => {
       return res.status(400).json({ message: 'Chua co file AI nao duoc tao' });
     }
     const latestFile = task.aiGeneratedFiles[task.aiGeneratedFiles.length - 1];
-    const outgoing = await Document.create({
-      type: 'OUTGOING',
-      agencyId: req.user.agencyId || null,
-      summary: 'Van ban phan hoi - ' + task.title,
-      category: 'Cong van',
-      status: 'Cho xu ly',
-      replyTo: sourceDocId || undefined,
-      attachments: [{
-        originalName: latestFile.fileName,
-        fileName: latestFile.fileName,
-        filePath: latestFile.filePath,
-        fileSize: 0,
-        mimeType: latestFile.fileType === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      }],
-      notes: 'Duoc tao tu dong boi AI tu cong viec: ' + task.title,
-      createdBy: req.user.userId
-    });
-    await ActivityLog.create({
-      user: req.user.userId,
-      action: 'AI_CREATE_OUTGOING',
-      target: 'VB Phản hồi: ' + outgoing._id,
-      details: 'AI tu dong tao VB di phan hoi tu cong viec: ' + task.title
-    });
+    
+    let outgoing;
+    try {
+      outgoing = await Document.create({
+        type: 'OUTGOING',
+        agencyId: req.user.agencyId || null,
+        summary: 'Van ban phan hoi - ' + task.title,
+        category: 'Cong van',
+        status: 'Cho xu ly',
+        replyTo: sourceDocId || undefined,
+        attachments: [{
+          originalName: latestFile.fileName,
+          fileName: latestFile.fileName,
+          filePath: latestFile.filePath,
+          fileSize: 0,
+          mimeType: latestFile.fileType === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }],
+        notes: 'Duoc tao tu dong boi AI tu cong viec: ' + task.title,
+        createdBy: req.user.userId
+      });
+    } catch (docErr) {
+      console.error('Loi tao Document:', docErr);
+      return res.status(500).json({ message: 'Lỗi Document.create', error: docErr.message });
+    }
+
+    try {
+      await ActivityLog.create({
+        user: req.user.userId,
+        action: 'AI_CREATE_OUTGOING',
+        target: 'VB Phản hồi: ' + outgoing._id,
+        details: 'AI tu dong tao VB di phan hoi tu cong viec: ' + task.title
+      });
+    } catch (logErr) {
+      console.error('Loi tao ActivityLog:', logErr);
+      // Khong can return error vi da tao Document thanh cong
+    }
+
     res.status(201).json({ message: 'Da tao van ban di tu ban thao AI', document: outgoing });
   } catch (err) {
-    res.status(500).json({ message: 'Loi tao VB di', error: err.message });
+    console.error('Loi he thong tao VB di:', err);
+    res.status(500).json({ message: 'Loi he thong', error: err.message });
   }
 };
 
