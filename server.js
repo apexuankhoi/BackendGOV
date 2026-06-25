@@ -125,6 +125,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/activity-log', activityLogRoutes);
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/drive', require('./routes/drive'));
+app.use('/api/agencies', require('./routes/agencies'));
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running correctly.' });

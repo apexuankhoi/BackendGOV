@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-password');
+    const users = await User.find().select('-password').populate('agencyId', 'name level');
     res.json(users);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server' });
@@ -12,14 +12,15 @@ exports.getUsers = async (req, res) => {
 
 exports.createUser = async (req, res) => {
   try {
-    const { username, email, password, role, province, district, commune } = req.body;
+    const { username, email, password, role, province, district, commune, agencyId } = req.body;
     let user = await User.findOne({ email });
     if (user) return res.status(400).json({ message: 'Email đã tồn tại' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     user = new User({
       username, email, password: hashedPassword, role,
-      locationContext: { province, district, commune }
+      locationContext: { province, district, commune },
+      agencyId: agencyId || null
     });
     
     await user.save();
