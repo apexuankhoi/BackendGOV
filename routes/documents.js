@@ -22,20 +22,22 @@ const checkAdmin = (req, res, next) => {
   next();
 };
 
-// === CRUD Văn bản ===
-router.get('/stats', authMiddleware, checkStaff, documentController.getStats);
-router.get('/', authMiddleware, checkStaff, documentController.getDocuments);
-router.get('/:id', authMiddleware, checkStaff, documentController.getDocument);
-router.post('/', authMiddleware, checkStaff, uploadCloudinary.array('files', 5), documentController.createDocument);
-router.put('/:id', authMiddleware, checkStaff, documentController.updateDocument);
-router.delete('/:id', authMiddleware, checkAdmin, documentController.deleteDocument);
-router.post('/:id/dispatch', authMiddleware, checkStaff, documentController.dispatchDocument);
-
 // === AI ===
 router.get('/ai-report', authMiddleware, checkStaff, aiDocController.aiGenerateReport);
 router.get('/ai-deadline-alerts', authMiddleware, checkStaff, aiDocController.getDeadlineAlerts);
 router.post('/ai-upload', authMiddleware, checkStaff, uploadCloudinary.single('file'), aiDocController.aiReadUpload);
 router.post('/ai-create-tasks', authMiddleware, checkStaff, aiDocController.aiCreateTasks);
+
+// === CRUD Văn bản ===
+router.get('/stats', authMiddleware, checkStaff, documentController.getStats);
+router.get('/', authMiddleware, checkStaff, documentController.getDocuments);
+router.post('/', authMiddleware, checkStaff, uploadCloudinary.array('files', 5), documentController.createDocument);
+
+// Route động phải đặt dưới
+router.get('/:id', authMiddleware, checkStaff, documentController.getDocument);
+router.put('/:id', authMiddleware, checkStaff, documentController.updateDocument);
+router.delete('/:id', authMiddleware, checkAdmin, documentController.deleteDocument);
+router.post('/:id/dispatch', authMiddleware, checkStaff, documentController.dispatchDocument);
 router.post('/:id/ai-read', authMiddleware, checkStaff, aiDocController.aiReadDocument);
 
 // === AI Chat ===
