@@ -44,18 +44,18 @@ async function seedData() {
     for (const [provinceName, communes] of Object.entries(PROVINCES_DATA)) {
       // 1. Tạo Tỉnh
       const province = await Agency.create({
-        name: `UBND Tỉnh ${provinceName}`,
+        name: `Tỉnh ${provinceName}`,
         level: 'PROVINCE',
-        description: `Ủy ban Nhân dân cấp Tỉnh - ${provinceName}`
+        description: `Cấp Tỉnh - ${provinceName}`
       });
       console.log(`Đã tạo Tỉnh: ${province.name}`);
 
       // 2. Tạo các Xã thuộc Tỉnh
       const communeDocs = communes.map(communeName => ({
-        name: `UBND ${communeName}`,
+        name: `${communeName}`,
         level: 'COMMUNE',
         parentAgency: province._id,
-        description: `Ủy ban Nhân dân cấp Xã/Phường - ${communeName}`
+        description: `Cấp Xã/Phường - ${communeName}`
       }));
       
       await Agency.insertMany(communeDocs);

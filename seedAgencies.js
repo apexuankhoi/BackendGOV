@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const mongoose = require('mongoose');
 const Agency = require('./models/Agency');
 const User = require('./models/User');
@@ -11,15 +11,15 @@ async function seed() {
     console.log('Connected to DB');
 
     // Tao 1 Tinh
-    let tinh = await Agency.findOne({ name: 'UBND Tỉnh Đắk Lắk' });
+    let tinh = await Agency.findOne({ name: 'Tỉnh Đắk Lắk' });
     if (!tinh) {
-      tinh = await Agency.create({ name: 'UBND Tỉnh Đắk Lắk', level: 'PROVINCE' });
+      tinh = await Agency.create({ name: 'Tỉnh Đắk Lắk', level: 'PROVINCE' });
     }
 
     // Tao 1 Xa
-    let phuong = await Agency.findOne({ name: 'UBND Phường Ea Tam' });
+    let phuong = await Agency.findOne({ name: 'Phường Ea Tam' });
     if (!phuong) {
-      phuong = await Agency.create({ name: 'UBND Phường Ea Tam', level: 'COMMUNE', parentAgency: tinh._id });
+      phuong = await Agency.create({ name: 'Phường Ea Tam', level: 'COMMUNE', parentAgency: tinh._id });
     }
 
     console.log('Agencies created/found');
