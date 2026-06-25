@@ -37,10 +37,9 @@ exports.createOutgoingFromAI = async (req, res) => {
       createdBy: req.user.userId
     });
     await ActivityLog.create({
+      user: req.user.userId,
       action: 'AI_CREATE_OUTGOING',
-      targetType: 'Document',
-      targetId: outgoing._id,
-      userId: req.user.userId,
+      target: 'VB Phản hồi: ' + outgoing._id,
       details: 'AI tu dong tao VB di phan hoi tu cong viec: ' + task.title
     });
     res.status(201).json({ message: 'Da tao van ban di tu ban thao AI', document: outgoing });
@@ -58,10 +57,9 @@ exports.approveDocument = async (req, res) => {
     doc.issuedDate = new Date();
     await doc.save();
     await ActivityLog.create({
+      user: req.user.userId,
       action: 'APPROVE_DOCUMENT',
-      targetType: 'Document',
-      targetId: doc._id,
-      userId: req.user.userId,
+      target: 'Duyệt VB: ' + doc._id,
       details: 'Duyet va phat hanh van ban'
     });
     res.json({ message: 'Da duyet va phat hanh van ban', document: doc });
