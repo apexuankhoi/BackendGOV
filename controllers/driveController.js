@@ -20,6 +20,34 @@ exports.getFiles = async (req, res) => {
     const files = await SharedFile.find(filter)
       .populate('uploadedBy', 'username role')
       .sort({ isFolder: -1, updatedAt: -1 });
+
+    // Fix broken absolute paths from previous uploads
+    let needsUpdate = false;
+    for (let f of files) {
+      let changed = false;
+      if (f.currentFile && f.currentFile.filePath && f.currentFile.filePath.includes('uploads')) {
+        const parts = f.currentFile.filePath.replace(/\\/g, '/').split('uploads/');
+        if (parts.length > 1 && f.currentFile.filePath !== 'uploads/' + parts[1]) {
+          f.currentFile.filePath = 'uploads/' + parts[1];
+          changed = true;
+        }
+      }
+      if (f.versions && f.versions.length > 0) {
+        for (let v of f.versions) {
+          if (v.filePath && v.filePath.includes('uploads')) {
+            const parts = v.filePath.replace(/\\/g, '/').split('uploads/');
+            if (parts.length > 1 && v.filePath !== 'uploads/' + parts[1]) {
+              v.filePath = 'uploads/' + parts[1];
+              changed = true;
+            }
+          }
+        }
+      }
+      if (changed) {
+        await f.save();
+        needsUpdate = true;
+      }
+    }
       
     res.json(files);
   } catch (err) {
