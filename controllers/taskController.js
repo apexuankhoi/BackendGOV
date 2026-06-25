@@ -6,6 +6,7 @@ exports.getTasks = async (req, res) => {
   try {
     const { status, priority, assignedTo, search } = req.query;
     const query = {};
+    if (req.user.agencyId) query.agencyId = req.user.agencyId;
     
     if (status) query.status = status;
     if (priority) query.priority = priority;
@@ -32,13 +33,15 @@ exports.getTasks = async (req, res) => {
 // Lấy công việc quá hạn
 exports.getOverdueTasks = async (req, res) => {
   try {
-    // Cập nhật tất cả task quá hạn
+    const scope = req.user.agencyId ? { agencyId: req.user.agencyId } : {};
+
+    // Cập nhật tất cả task quá hạn (scope chung hoặc theo agencyId)
     await Task.updateMany(
-      { deadline: { $lt: new Date() }, status: { $nin: ['Hoàn thành', 'Hủy', 'Quá hạn'] } },
+      { ...scope, deadline: { $lt: new Date() }, status: { $nin: ['Hoàn thành', 'Hủy', 'Quá hạn'] } },
       { $set: { status: 'Quá hạn' } }
     );
 
-    const tasks = await Task.find({ status: 'Quá hạn' })
+    const tasks = await Task.find({ ...scope, status: 'Quá hạn' })
       .populate('assignedBy', 'username')
       .populate('assignedTo', 'username')
       .sort({ deadline: 1 });
@@ -52,19 +55,21 @@ exports.getOverdueTasks = async (req, res) => {
 // Thống kê công việc
 exports.getTaskStats = async (req, res) => {
   try {
+    const scope = req.user.agencyId ? { agencyId: req.user.agencyId } : {};
+
     // Cập nhật quá hạn trước
     await Task.updateMany(
-      { deadline: { $lt: new Date() }, status: { $nin: ['Hoàn thành', 'Hủy', 'Quá hạn'] } },
+      { ...scope, deadline: { $lt: new Date() }, status: { $nin: ['Hoàn thành', 'Hủy', 'Quá hạn'] } },
       { $set: { status: 'Quá hạn' } }
     );
 
     const [total, pending, inProgress, completed, overdue, cancelled] = await Promise.all([
-      Task.countDocuments(),
-      Task.countDocuments({ status: 'Chưa thực hiện' }),
-      Task.countDocuments({ status: 'Đang thực hiện' }),
-      Task.countDocuments({ status: 'Hoàn thành' }),
-      Task.countDocuments({ status: 'Quá hạn' }),
-      Task.countDocuments({ status: 'Hủy' })
+      Task.countDocuments(scope),
+      Task.countDocuments({ ...scope, status: 'Chưa thực hiện' }),
+      Task.countDocuments({ ...scope, status: 'Đang thực hiện' }),
+      Task.countDocuments({ ...scope, status: 'Hoàn thành' }),
+      Task.countDocuments({ ...scope, status: 'Quá hạn' }),
+      Task.countDocuments({ ...scope, status: 'Hủy' })
     ]);
 
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -78,7 +83,7 @@ exports.getTaskStats = async (req, res) => {
 // Tạo công việc
 exports.createTask = async (req, res) => {
   try {
-    const data = { ...req.body, assignedBy: req.user.userId };
+    const data = { ...req.body, assignedBy: req.user.userId, agencyId: req.user.agencyId || null };
     const task = await Task.create(data);
 
     await ActivityLog.create({
@@ -97,7 +102,10 @@ exports.createTask = async (req, res) => {
 // Cập nhật công việc
 exports.updateTask = async (req, res) => {
   try {
-    const task = await Task.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
+    const findQuery = { _id: req.params.id };
+    if (req.user.agencyId) findQuery.agencyId = req.user.agencyId;
+    
+    const task = await Task.findOneAndUpdate(findQuery, req.body, { returnDocument: 'after' });
     if (!task) return res.status(404).json({ message: 'Không tìm thấy công việc' });
 
     await ActivityLog.create({
@@ -116,7 +124,10 @@ exports.updateTask = async (req, res) => {
 // Xóa công việc
 exports.deleteTask = async (req, res) => {
   try {
-    const task = await Task.findByIdAndDelete(req.params.id);
+    const findQuery = { _id: req.params.id };
+    if (req.user.agencyId) findQuery.agencyId = req.user.agencyId;
+    
+    const task = await Task.findOneAndDelete(findQuery);
     if (!task) return res.status(404).json({ message: 'Không tìm thấy công việc' });
 
     await ActivityLog.create({

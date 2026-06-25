@@ -7,6 +7,7 @@ exports.getNotificationSummary = async (req, res) => {
     
     // Nếu là Admin, xem xét tất cả. Nếu là user thường, chỉ xem task của mình
     let taskQuery = { status: 'Quá hạn' };
+    if (req.user.agencyId) taskQuery.agencyId = req.user.agencyId;
     if (role !== 'SENIOR_ADMIN' && role !== 'ADMIN' && role !== 'PROVINCE_ADMIN') {
       taskQuery.assignedTo = req.user.userId;
     }
@@ -17,10 +18,10 @@ exports.getNotificationSummary = async (req, res) => {
       .limit(5);
 
     // Văn bản Khẩn / Hỏa tốc
-    const urgentDocs = await Document.find({ 
-      type: 'INCOMING', 
-      urgency: { $in: ['Khẩn', 'Thượng khẩn', 'Hỏa tốc'] } 
-    })
+    const docQuery = { type: 'INCOMING', urgency: { $in: ['Khẩn', 'Thượng khẩn', 'Hỏa tốc'] } };
+    if (req.user.agencyId) docQuery.agencyId = req.user.agencyId;
+
+    const urgentDocs = await Document.find(docQuery)
       .sort({ createdAt: -1 })
       .limit(5);
 
