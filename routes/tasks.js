@@ -26,4 +26,10 @@ router.put('/:id', authMiddleware, checkStaff, taskController.updateTask);
 router.delete('/:id', authMiddleware, checkAdmin, taskController.deleteTask);
 router.post('/:id/ai-solve', authMiddleware, checkStaff, aiDocController.aiSolveTask);
 
+// === AI Chat ===
+const aiChatController = require('../controllers/aiChatController');
+router.get('/:id/chat', authMiddleware, checkStaff, aiChatController.getChatHistory);
+router.post('/:id/chat', authMiddleware, checkStaff, aiChatController.sendChatMessage);
+router.delete('/:id/chat', authMiddleware, checkStaff, aiChatController.clearChatHistory);
+
 module.exports = router;

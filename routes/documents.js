@@ -29,6 +29,7 @@ router.get('/:id', authMiddleware, checkStaff, documentController.getDocument);
 router.post('/', authMiddleware, checkStaff, uploadCloudinary.array('files', 5), documentController.createDocument);
 router.put('/:id', authMiddleware, checkStaff, documentController.updateDocument);
 router.delete('/:id', authMiddleware, checkAdmin, documentController.deleteDocument);
+router.post('/:id/dispatch', authMiddleware, checkStaff, documentController.dispatchDocument);
 
 // === AI ===
 router.get('/ai-report', authMiddleware, checkStaff, aiDocController.aiGenerateReport);
@@ -36,5 +37,22 @@ router.get('/ai-deadline-alerts', authMiddleware, checkStaff, aiDocController.ge
 router.post('/ai-upload', authMiddleware, checkStaff, uploadCloudinary.single('file'), aiDocController.aiReadUpload);
 router.post('/ai-create-tasks', authMiddleware, checkStaff, aiDocController.aiCreateTasks);
 router.post('/:id/ai-read', authMiddleware, checkStaff, aiDocController.aiReadDocument);
+
+// === AI Chat ===
+const aiChatController = require('../controllers/aiChatController');
+router.get('/:id/chat', authMiddleware, checkStaff, aiChatController.getChatHistory);
+router.post('/:id/chat', authMiddleware, checkStaff, aiChatController.sendChatMessage);
+router.delete('/:id/chat', authMiddleware, checkStaff, aiChatController.clearChatHistory);
+
+// === AI Advanced (GD 6-9) ===
+const aiAdvanced = require('../controllers/aiAdvancedController');
+router.post('/ai-create-outgoing', authMiddleware, checkStaff, aiAdvanced.createOutgoingFromAI);
+router.post('/:id/ai-approve', authMiddleware, checkAdmin, aiAdvanced.approveDocument);
+router.post('/:id/ai-proofread', authMiddleware, checkStaff, aiAdvanced.aiProofread);
+router.post('/ai-synthesize', authMiddleware, checkStaff, aiAdvanced.aiSynthesizeMultiple);
+router.post('/ai-query', authMiddleware, checkStaff, aiAdvanced.aiNaturalQuery);
+router.get('/ai-kpi', authMiddleware, checkAdmin, aiAdvanced.getStaffKPI);
+router.get('/ai-kpi-evaluate', authMiddleware, checkAdmin, aiAdvanced.aiEvaluateKPI);
+router.get('/ai-cross-agency', authMiddleware, checkStaff, aiAdvanced.crossAgencySynthesis);
 
 module.exports = router;

@@ -5,6 +5,9 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   
+  // E-Government Tenant
+  agencyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agency', default: null },
+  
   // Áp dụng kiến trúc 5 Roles
   role: { 
     type: String, 

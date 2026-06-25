@@ -8,6 +8,11 @@ const documentSchema = new mongoose.Schema({
     required: true
   },
 
+  // E-Government Tenant
+  agencyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agency', default: null },
+  fromAgencyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agency', default: null }, // Cơ quan gửi (dùng cho liên thông)
+  isInternal: { type: Boolean, default: true }, // Phân biệt VB nội bộ và VB liên thông
+
   // Thông tin văn bản
   documentNumber: { type: String, default: '' },        // Số văn bản (VD: 125/KH-CAX)
   issuedDate: { type: Date },                           // Ngày ban hành
@@ -63,6 +68,9 @@ const documentSchema = new mongoose.Schema({
   ocrContent: { type: String, default: '' },              // Nội dung OCR từ PDF/ảnh
   aiSuggestion: { type: String, default: '' },            // Đề xuất xử lý từ AI
   aiExtracted: { type: Boolean, default: false },         // Đã qua AI trích xuất chưa
+
+  // Liên kết phản hồi (VB đi trả lời VB đến)
+  replyTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Document' },
 
   // Metadata
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

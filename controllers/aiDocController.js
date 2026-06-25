@@ -291,6 +291,8 @@ exports.aiCreateTasks = async (req, res) => {
 };
 
 // API: AI giải quyết công việc
+const { generateFileFromJSON } = require('../utils/aiFileGenerator');
+
 exports.aiSolveTask = async (req, res) => {
   try {
     const { id } = req.params;
@@ -310,26 +312,55 @@ Nhiệm vụ của bạn là GIẢI QUYẾT công việc sau đây một cách c
 Tên công việc: "${task.title}"
 Mô tả công việc: "${task.description || 'Không có'}"${sourceContext}
 
-Dựa vào các thông tin trên, hãy ĐÓNG VAI người thực hiện và viết ra KẾT QUẢ giải quyết công việc.
-Nếu yêu cầu lập kế hoạch/báo cáo/công văn trả lời, hãy SOẠN THẢO SẴN toàn bộ nội dung văn bản đó.
-Nếu yêu cầu xử lý tình huống, hãy đưa ra giải pháp từng bước.
-Định dạng bằng Markdown. Không cần chào hỏi, đi thẳng vào nội dung công việc.`;
+Dựa vào các thông tin trên, hãy suy luận xem công việc này cần lập một TỜ TRÌNH, BÁO CÁO, KẾ HOẠCH, hay BẢNG DANH SÁCH (EXCEL).
+Hãy ĐÓNG VAI người thực hiện và TRẢ VỀ DỮ LIỆU ĐỊNH DẠNG JSON CHUẨN XÁC để hệ thống tự động sinh file Word hoặc Excel.
+BẮT BUỘC trả về đúng cấu trúc JSON sau (không markdown, không text dư thừa):
+{
+  "fileType": "docx" hoặc "xlsx",
+  "documentMeta": {
+    "agencyName": "ỦY BAN NHÂN DÂN",
+    "title": "TÊN VĂN BẢN (VIẾT HOA)",
+    "signer": "CHỦ TỊCH"
+  },
+  "contentBlocks": [
+    { "type": "heading", "text": "I. NỘI DUNG CHÍNH" },
+    { "type": "paragraph", "text": "Văn xuôi nội dung..." }
+  ],
+  "tableData": {
+    "headers": ["STT", "Cột 1", "Cột 2"],
+    "rows": [["1", "Giá trị 1", "Giá trị 2"]]
+  }
+}
+Lưu ý: Nếu chọn fileType "docx", bạn PHẢI cung cấp contentBlocks. Nếu chọn "xlsx", bạn PHẢI cung cấp tableData.`;
 
     const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 1500,
-      temperature: 0.7
+      max_tokens: 2500,
+      temperature: 0.7,
+      response_format: { type: "json_object" }
     }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
 
-    const aiSolution = response.data.choices[0].message.content.trim();
+    const aiResponseText = response.data.choices[0].message.content.trim();
+    let jsonData;
+    try {
+      jsonData = JSON.parse(aiResponseText);
+    } catch (e) {
+      return res.status(500).json({ message: 'Lỗi parse JSON từ AI', error: e.message });
+    }
     
-    task.aiSolution = aiSolution;
+    // Lưu nội dung thô (JSON string) vào aiSolution để xem
+    task.aiSolution = "✅ **AI đã tự động soạn thảo file thành công!** Vui lòng tải file đính kèm để xem chi tiết.\n\n```json\n" + JSON.stringify(jsonData, null, 2) + "\n```";
+    
+    // Sinh file vật lý
+    const generatedFile = await generateFileFromJSON(jsonData, req.user, task._id.toString());
+    
+    task.aiGeneratedFiles.push(generatedFile);
     await task.save();
 
-    res.json({ message: 'AI đã giải quyết xong', aiSolution });
+    res.json({ message: 'AI đã giải quyết và sinh file xong', task });
   } catch (err) {
     console.error('Lỗi AI Solve Task:', err.response?.data || err.message);
     res.status(500).json({ message: 'Lỗi AI giải quyết công việc', error: err.message });

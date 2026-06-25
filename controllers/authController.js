@@ -133,13 +133,15 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).populate('agencyId', 'name level');
     if (!user) return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
-    const token = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '7d' });
-    const refreshToken = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '7d' }); // Refresh sống 7 ngày
-    res.json({ token, refreshToken, role: user.role, username: user.username });
+    
+    const payload = { userId: user._id, role: user.role, agencyId: user.agencyId ? user.agencyId._id : null };
+    const token = jwt.sign(payload, SECRET, { expiresIn: '7d' });
+    const refreshToken = jwt.sign(payload, SECRET, { expiresIn: '7d' }); // Refresh sống 7 ngày
+    res.json({ token, refreshToken, role: user.role, username: user.username, agency: user.agencyId });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }

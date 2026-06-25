@@ -169,3 +169,53 @@ exports.getStats = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 };
+
+// ================= Giai đoạn 3: LIÊN THÔNG VĂN BẢN =================
+exports.dispatchDocument = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { targetAgencyIds } = req.body;
+    
+    if (!targetAgencyIds || targetAgencyIds.length === 0) {
+      return res.status(400).json({ message: 'Cần chọn ít nhất 1 cơ quan nhận' });
+    }
+
+    const doc = await Document.findOne({ _id: id, agencyId: req.user.agencyId });
+    if (!doc) return res.status(404).json({ message: 'Không tìm thấy văn bản' });
+
+    // Tạo các bản sao văn bản cho từng cơ quan nhận (Trở thành Văn bản đến của họ)
+    const promises = targetAgencyIds.map(agencyId => {
+      return Document.create({
+        type: 'INCOMING',
+        agencyId: agencyId,
+        fromAgencyId: req.user.agencyId,
+        isInternal: false,
+        documentNumber: doc.documentNumber,
+        issuedDate: doc.issuedDate || new Date(),
+        receivedDate: new Date(),
+        issuingAgency: doc.issuingAgency,
+        signer: doc.signer,
+        signerTitle: doc.signerTitle,
+        summary: doc.summary,
+        category: doc.category,
+        field: doc.field,
+        urgency: doc.urgency,
+        securityLevel: doc.securityLevel,
+        status: 'Chờ xử lý',
+        attachments: doc.attachments,
+        ocrContent: doc.ocrContent,
+        createdBy: req.user.userId
+      });
+    });
+
+    await Promise.all(promises);
+    
+    // Đánh dấu VB gốc là đã liên thông
+    doc.isInternal = false;
+    await doc.save();
+
+    res.json({ message: `Đã gửi liên thông thành công tới ${targetAgencyIds.length} cơ quan` });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi gửi liên thông', error: err.message });
+  }
+};

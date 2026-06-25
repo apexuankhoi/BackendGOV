@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 
 const taskSchema = new mongoose.Schema({
+  // E-Government Tenant
+  agencyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agency', default: null },
+
   // Thông tin công việc
   title: { type: String, required: true },                // Tên công việc
   description: { type: String, default: '' },             // Mô tả chi tiết
@@ -30,7 +33,13 @@ const taskSchema = new mongoose.Schema({
   
   // AI
   aiGenerated: { type: Boolean, default: false },         // Được AI tạo?
-  aiSolution: { type: String, default: '' },              // AI giải quyết hộ
+  aiSolution: { type: String, default: '' },              // AI giải quyết hộ (Nội dung raw/Markdown)
+  aiGeneratedFiles: [{
+    fileName: String,
+    filePath: String,
+    fileType: String
+  }],
+
   
   // Metadata
   notes: { type: String, default: '' },
