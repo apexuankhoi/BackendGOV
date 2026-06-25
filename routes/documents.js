@@ -30,6 +30,7 @@ router.post('/ai-create-tasks', authMiddleware, checkStaff, aiDocController.aiCr
 
 // === CRUD Văn bản ===
 router.get('/stats', authMiddleware, checkStaff, documentController.getStats);
+router.get('/child-agencies-stats', authMiddleware, checkStaff, documentController.getChildAgenciesStats);
 router.get('/', authMiddleware, checkStaff, documentController.getDocuments);
 router.post('/', authMiddleware, checkStaff, uploadCloudinary.array('files', 5), documentController.createDocument);
 

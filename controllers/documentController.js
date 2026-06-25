@@ -219,3 +219,71 @@ exports.dispatchDocument = async (req, res) => {
     res.status(500).json({ message: 'Lỗi gửi liên thông', error: err.message });
   }
 };
+
+// ================= Giai đoạn 4: Quan sát Tuyến dưới (Dành cho cấp Tỉnh) =================
+exports.getChildAgenciesStats = async (req, res) => {
+  try {
+    const { agencyId } = req.user;
+    if (!agencyId) return res.status(403).json({ message: 'Chưa có cơ quan' });
+
+    const Agency = require('../models/Agency');
+    const Task = require('../models/Task');
+    
+    // Tìm các cơ quan cấp dưới
+    const childAgencies = await Agency.find({ parentAgency: agencyId }).sort({ name: 1 });
+    if (!childAgencies || childAgencies.length === 0) {
+      return res.json({ agencies: [] });
+    }
+
+    // Lấy thông kê cho từng cơ quan
+    const result = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const agency of childAgencies) {
+      const [
+        totalIncoming, totalOutgoing, pendingCount, overdueCount,
+        tasksTotal, tasksDone, tasksOverdue,
+        incomingToday, outgoingToday
+      ] = await Promise.all([
+        Document.countDocuments({ agencyId: agency._id, type: 'INCOMING' }),
+        Document.countDocuments({ agencyId: agency._id, type: 'OUTGOING' }),
+        Document.countDocuments({ agencyId: agency._id, status: 'Chờ xử lý' }),
+        Document.countDocuments({ agencyId: agency._id, status: 'Quá hạn' }),
+        Task.countDocuments({ agencyId: agency._id }),
+        Task.countDocuments({ agencyId: agency._id, status: 'Hoàn thành' }),
+        Task.countDocuments({ agencyId: agency._id, status: 'Quá hạn' }),
+        Document.countDocuments({ agencyId: agency._id, type: 'INCOMING', createdAt: { $gte: today } }),
+        Document.countDocuments({ agencyId: agency._id, type: 'OUTGOING', createdAt: { $gte: today } }),
+      ]);
+
+      // Tính điểm đánh giá sơ bộ (Đơn giản hóa)
+      let score = 100;
+      if (overdueCount > 0) score -= (overdueCount * 2);
+      if (tasksOverdue > 0) score -= (tasksOverdue * 2);
+      if (score < 0) score = 0;
+      
+      let rating = 'Xuất sắc';
+      if (score < 50) rating = 'Cần cải thiện';
+      else if (score < 75) rating = 'Khá';
+      else if (score < 90) rating = 'Tốt';
+
+      result.push({
+        _id: agency._id,
+        name: agency.name,
+        docs: {
+          totalIncoming, totalOutgoing, pendingCount, overdueCount, incomingToday, outgoingToday
+        },
+        tasks: {
+          tasksTotal, tasksDone, tasksOverdue
+        },
+        score,
+        rating
+      });
+    }
+
+    res.json({ agencies: result });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi tải dữ liệu cấp dưới', error: err.message });
+  }
+};
