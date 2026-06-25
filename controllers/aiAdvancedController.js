@@ -26,8 +26,8 @@ exports.createOutgoingFromAI = async (req, res) => {
         type: 'OUTGOING',
         agencyId: req.user.agencyId || null,
         summary: 'Van ban phan hoi - ' + task.title,
-        category: 'Cong van',
-        status: 'Cho xu ly',
+        category: 'Công văn',
+        status: 'Chờ xử lý',
         replyTo: sourceDocId || undefined,
         attachments: [{
           originalName: latestFile.fileName,
