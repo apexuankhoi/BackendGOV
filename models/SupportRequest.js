@@ -73,9 +73,8 @@ const supportRequestSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-// Index cho tra cứu
+// Index cho tra cứu (trackingCode không cần index() riêng vì đã có unique:true ở trên)
 supportRequestSchema.index({ agencyId: 1, status: 1 });
-supportRequestSchema.index({ trackingCode: 1 });
 supportRequestSchema.index({ senderPhone: 1 });
 supportRequestSchema.index({ createdAt: -1 });
 
