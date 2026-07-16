@@ -1,5 +1,6 @@
 const Document = require('../models/Document');
 const Task = require('../models/Task');
+const SupportRequest = require('../models/SupportRequest');
 
 exports.getNotificationSummary = async (req, res) => {
   try {
@@ -25,6 +26,16 @@ exports.getNotificationSummary = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(5);
 
+    // ═══ P2: Yêu cầu hỗ trợ mới chưa xử lý ═══
+    let supportQuery = { status: { $in: ['NEW', 'RECEIVED'] } };
+    if (role === 'COMMUNE_ADMIN' && req.user.agencyId) {
+      supportQuery.agencyId = req.user.agencyId;
+    }
+    const pendingSupport = await SupportRequest.find(supportQuery)
+      .populate('agencyId', 'name')
+      .sort({ createdAt: -1 })
+      .limit(5);
+
     const notifications = [];
 
     overdueTasks.forEach(t => {
@@ -45,6 +56,18 @@ exports.getNotificationSummary = async (req, res) => {
         title: `Văn bản ${d.urgency}`,
         message: `Có văn bản đến: "${d.title}" cần xử lý ngay.`,
         date: d.createdAt,
+        isRead: false
+      });
+    });
+
+    // ═══ P2: Thêm thông báo yêu cầu hỗ trợ ═══
+    pendingSupport.forEach(s => {
+      notifications.push({
+        id: s._id,
+        type: 'support',
+        title: `🆘 Yêu cầu hỗ trợ mới`,
+        message: `"${s.senderName}" cần hỗ trợ — ${s.agencyId?.name || 'Chưa rõ xã'}`,
+        date: s.createdAt,
         isRead: false
       });
     });
