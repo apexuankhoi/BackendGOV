@@ -3,6 +3,18 @@ const router = express.Router();
 const Agency = require('../models/Agency');
 const authMiddleware = require('../middleware/authMiddleware');
 
+// GET public: Danh sách xã/phường (không cần auth, cho form đăng ký public)
+router.get('/public', async (req, res) => {
+  try {
+    const agencies = await Agency.find({ level: { $in: ['COMMUNE', 'DISTRICT'] } })
+      .select('_id name level')
+      .sort({ level: 1, name: 1 });
+    res.json(agencies);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi tải danh sách', error: err.message });
+  }
+});
+
 // GET all agencies
 router.get('/', authMiddleware, async (req, res) => {
   try {

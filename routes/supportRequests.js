@@ -16,6 +16,21 @@ router.post('/submit', controller.submitRequest);
 // Tra cứu trạng thái bằng mã hoặc SĐT
 router.get('/track', controller.trackRequest);
 
+// QR Code cho điểm hỗ trợ của xã
+router.get('/qr/:agencyId', authMiddleware, async (req, res) => {
+  try {
+    const QRCode = require('qrcode');
+    const Agency = require('../models/Agency');
+    const BASE_URL = process.env.FRONTEND_URL || 'https://webgov.daklak.gov.vn';
+    const agency = await Agency.findById(req.params.agencyId).select('name');
+    const url = `${BASE_URL}/ho-tro?agency=${req.params.agencyId}`;
+    const qrDataUrl = await QRCode.toDataURL(url, { width: 300, margin: 2, color: { dark: '#10B981', light: '#FFFFFF' } });
+    res.json({ agencyName: agency?.name || 'Không rõ', qrDataUrl, registrationUrl: url });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi tạo QR', error: err.message });
+  }
+});
+
 // ═══════════════════════════════════════════════════
 //  ADMIN routes (cần đăng nhập)
 // ═══════════════════════════════════════════════════

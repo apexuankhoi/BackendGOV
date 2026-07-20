@@ -130,6 +130,13 @@ exports.getRequests = async (req, res) => {
 
     if (status) filter.status = status;
     if (category) filter.category = category;
+    if (req.query.search) {
+      filter.$or = [
+        { senderName: { $regex: req.query.search, $options: 'i' } },
+        { senderPhone: { $regex: req.query.search, $options: 'i' } },
+        { trackingCode: { $regex: req.query.search, $options: 'i' } }
+      ];
+    }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 

@@ -17,6 +17,8 @@ const campaignReportSchema = new mongoose.Schema({
   youthTrained: { type: Number, default: 0 },
   safetyCampaigns: { type: Number, default: 0 },
   mediaPosts: { type: Number, default: 0 },
+  smartwebCount: { type: Number, default: 0 },    // Số tiểu thương đăng ký website .VN SmartWeb
+  websitesCreated: { type: Number, default: 0 },  // Số website đã được tạo/kích hoạt thực tế
 
   issues: { type: String }, // Khó khăn vướng mắc
   proposals: { type: String }, // Đề xuất

@@ -128,6 +128,7 @@ app.use('/api/drive', require('./routes/drive'));
 app.use('/api/agencies', require('./routes/agencies'));
 app.use('/api/campaign', require('./routes/campaign'));
 app.use('/api/support-requests', require('./routes/supportRequests'));
+app.use('/api/smartweb', require('./routes/smartweb'));
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running correctly.' });

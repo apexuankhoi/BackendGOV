@@ -247,14 +247,16 @@ exports.getChildAgenciesStats = async (req, res) => {
 
     const Agency = require('../models/Agency');
     const Task = require('../models/Task');
-    
+    const CampaignReport = require('../models/CampaignReport');
+    const SmartwebRegistration = require('../models/SmartwebRegistration');
+
     // Tìm các cơ quan cấp dưới
     const childAgencies = await Agency.find({ parentAgency: agencyId }).sort({ name: 1 });
     if (!childAgencies || childAgencies.length === 0) {
       return res.json({ agencies: [] });
     }
 
-    // Lấy thông kê cho từng cơ quan
+    // Lấy thống kê cho từng cơ quan
     const result = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -263,7 +265,8 @@ exports.getChildAgenciesStats = async (req, res) => {
       const [
         totalIncoming, totalOutgoing, pendingCount, overdueCount,
         tasksTotal, tasksDone, tasksOverdue,
-        incomingToday, outgoingToday
+        incomingToday, outgoingToday,
+        todayReport, smartwebTotal, smartwebActive
       ] = await Promise.all([
         Document.countDocuments({ agencyId: agency._id, type: 'INCOMING' }),
         Document.countDocuments({ agencyId: agency._id, type: 'OUTGOING' }),
@@ -274,14 +277,20 @@ exports.getChildAgenciesStats = async (req, res) => {
         Task.countDocuments({ agencyId: agency._id, status: 'Quá hạn' }),
         Document.countDocuments({ agencyId: agency._id, type: 'INCOMING', createdAt: { $gte: today } }),
         Document.countDocuments({ agencyId: agency._id, type: 'OUTGOING', createdAt: { $gte: today } }),
+        // Kiểm tra xã đã nộp báo cáo chiến dịch hôm nay chưa
+        CampaignReport.findOne({ agencyId: agency._id, reportDate: today }),
+        // Số tiểu thương đăng ký SmartWeb
+        SmartwebRegistration.countDocuments({ agencyId: agency._id }),
+        SmartwebRegistration.countDocuments({ agencyId: agency._id, status: 'ACTIVE' }),
       ]);
 
-      // Tính điểm đánh giá sơ bộ (Đơn giản hóa)
+      // Tính điểm đánh giá sơ bộ
       let score = 100;
       if (overdueCount > 0) score -= (overdueCount * 2);
       if (tasksOverdue > 0) score -= (tasksOverdue * 2);
+      if (!todayReport) score -= 5; // Trừ điểm nếu chưa nộp báo cáo hôm nay
       if (score < 0) score = 0;
-      
+
       let rating = 'Xuất sắc';
       if (score < 50) rating = 'Cần cải thiện';
       else if (score < 75) rating = 'Khá';
@@ -295,6 +304,20 @@ exports.getChildAgenciesStats = async (req, res) => {
         },
         tasks: {
           tasksTotal, tasksDone, tasksOverdue
+        },
+        campaign: {
+          reportedToday: !!todayReport,
+          todayStats: todayReport ? {
+            volunteers: todayReport.volunteers,
+            digitalSkills: todayReport.digitalSkills,
+            vneidSupport: todayReport.vneidSupport,
+            qrSupport: todayReport.qrSupport,
+            smartwebCount: todayReport.smartwebCount || 0,
+          } : null
+        },
+        smartweb: {
+          total: smartwebTotal,
+          active: smartwebActive
         },
         score,
         rating
