@@ -1,6 +1,7 @@
 const CampaignReport = require('../models/CampaignReport');
 const ExcelJS = require('exceljs');
 const Agency = require('../models/Agency');
+const Team = require('../models/Team');
 
 // Gửi báo cáo hằng ngày (hoặc cập nhật nếu đã có trong ngày)
 exports.submitReport = async (req, res) => {
@@ -64,6 +65,89 @@ exports.submitReport = async (req, res) => {
       updateData,
       { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
     );
+
+    // 3. Tự động khởi tạo / Cập nhật Đội hình Thanh niên số của xã tương ứng vào bảng Team
+    try {
+      const agency = await Agency.findById(agencyId);
+      if (agency) {
+        const communeName = agency.name;
+        const reporterId = req.user?.userId || req.user?._id;
+
+        // Suy luận huyện từ tên xã nếu chưa có
+        let districtName = req.user?.locationContext?.district || 'Đắk Lắk';
+        if (districtName === 'Đắk Lắk' || !districtName) {
+          if (communeName.includes('Buôn Ma Thuột') || communeName.includes('Tân An') || communeName.includes('Tân Lập') || communeName.includes('Thành Nhất') || communeName.includes('Ea Kao') || communeName.includes('Hòa Phú')) {
+            districtName = 'TP Buôn Ma Thuột';
+          } else if (communeName.includes('Buôn Hồ') || communeName.includes('Cư Bao') || communeName.includes('Ea Drông')) {
+            districtName = 'TX Buôn Hồ';
+          } else if (communeName.includes('Ea Súp') || communeName.includes('Ea Rốk') || communeName.includes('Ea Bung') || communeName.includes('Ia Rvê') || communeName.includes('Ia Lốp')) {
+            districtName = 'Huyện Ea Súp';
+          } else if (communeName.includes('Ea Wer') || communeName.includes('Ea Nuôl') || communeName.includes('Buôn Đôn')) {
+            districtName = 'Huyện Buôn Đôn';
+          } else if (communeName.includes('Ea Kiết') || communeName.includes('Ea M\'Droh') || communeName.includes('Quảng Phú') || communeName.includes('Cuôr Đăng') || communeName.includes('Cư M\'gar') || communeName.includes('Ea Tul')) {
+            districtName = 'Huyện Cư M\'gar';
+          } else if (communeName.includes('Pơng Drang') || communeName.includes('Krông Búk') || communeName.includes('Cư Pơng')) {
+            districtName = 'Huyện Krông Búk';
+          } else if (communeName.includes('Ea Khal') || communeName.includes('Ea Drăng') || communeName.includes('Ea Wy') || communeName.includes('Ea H\'Leo') || communeName.includes('Ea Hiao')) {
+            districtName = "Huyện Ea H'leo";
+          } else if (communeName.includes('Krông Năng') || communeName.includes('Dliê Ya') || communeName.includes('Tam Giang') || communeName.includes('Phú Xuân')) {
+            districtName = 'Huyện Krông Năng';
+          } else if (communeName.includes('Krông Pắc') || communeName.includes('Ea Knuếc') || communeName.includes('Tân Tiến') || communeName.includes('Ea Phê') || communeName.includes('Ea Kly') || communeName.includes('Vụ Bổn')) {
+            districtName = 'Huyện Krông Pắc';
+          } else if (communeName.includes('Ea Kar') || communeName.includes('Ea Ô') || communeName.includes('Ea Knốp') || communeName.includes('Cư Yang') || communeName.includes('Ea Păl')) {
+            districtName = 'Huyện Ea Kar';
+          } else if (communeName.includes('M\'Drắk') || communeName.includes('Ea Riêng') || communeName.includes('Cư M\'ta') || communeName.includes('Krông Á') || communeName.includes('Cư Prao') || communeName.includes('Ea Trang')) {
+            districtName = "Huyện M'Đrắk";
+          } else if (communeName.includes('Hòa Sơn') || communeName.includes('Dang Kang') || communeName.includes('Krông Bông') || communeName.includes('Yang Mao') || communeName.includes('Cư Pui')) {
+            districtName = 'Huyện Krông Bông';
+          } else if (communeName.includes('Liên Sơn') || communeName.includes('Đắk Liêng') || communeName.includes('Nam Ka') || communeName.includes('Đắk Phơi')) {
+            districtName = 'Huyện Lắk';
+          } else if (communeName.includes('Krông Nô') || communeName.includes('Ea Ning') || communeName.includes('Dray Bhăng') || communeName.includes('Ea Ktur') || communeName.includes('Krông Ana') || communeName.includes('Dur Kmăl') || communeName.includes('Ea Na')) {
+            districtName = 'Huyện Krông Ana';
+          } else {
+            districtName = 'Đắk Lắk';
+          }
+        }
+
+        const teamName = `Đội hình Thanh niên số ${communeName}`;
+        const totalBeneficiaries = (Number(digitalSkills) || 0) + (Number(vneidSupport) || 0) + (Number(publicServices) || 0);
+
+        await Team.findOneAndUpdate(
+          { 'location.commune': communeName },
+          {
+            name: teamName,
+            schoolOrUnit: `Đoàn cơ sở ${communeName}`,
+            createdBy: reporterId,
+            fieldsOfActivity: [
+              'Chuyển đổi số cộng đồng',
+              'Hướng dẫn VNeID & DVC trực tuyến',
+              'Phổ cập mã QR thanh toán không tiền mặt',
+              'Tập huấn AI & Kỹ năng số'
+            ],
+            location: {
+              province: 'Đắk Lắk',
+              district: districtName,
+              commune: communeName,
+              type: communeName.includes('Phường') ? 'Đô thị' : 'Nông thôn'
+            },
+            timeframe: {
+              startDate: new Date('2026-07-01'),
+              endDate: new Date('2026-08-31')
+            },
+            statistics: {
+              volunteersCount: Number(volunteers) || 15,
+              projectsCount: Number(youthProjects) || 1,
+              estimatedValue: Math.round(((Number(publicServices) || 0) * 0.05 + (Number(digitalSkills) || 0) * 0.02) * 10) / 10 || 5,
+              beneficiaries: totalBeneficiaries || 50
+            },
+            status: 'APPROVED'
+          },
+          { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
+        );
+      }
+    } catch (teamErr) {
+      console.error('Error auto-syncing Team:', teamErr);
+    }
 
     res.json({ message: 'Lưu báo cáo thành công', report });
   } catch (error) {
