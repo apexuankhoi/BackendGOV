@@ -297,12 +297,60 @@ async function seed() {
     ];
     await Document.insertMany(docData);
 
-    // ── 7. Tạo Bài viết Thông báo Chiến dịch ─────────────────────────────
+    // ── 7. Tạo Bài viết Tin tức & Sự kiện Chuyển đổi số ────────────────
     await News.create([
       {
         title: 'UBND và Tỉnh Đoàn Đắk Lắk phát động Chiến dịch 44 ngày đêm Chuyển đổi số năm 2026',
-        content: 'Chiến dịch tập trung vào 11 chỉ tiêu trọng điểm: hỗ trợ kỹ năng số cộng đồng, kích hoạt VNeID mức 2, DVC trực tuyến, thanh toán không tiền mặt QR, thành lập Đội hình Thanh niên số, lớp tập huấn, mô hình điểm CĐS, số hóa OCOP, đào tạo AI, công trình thanh niên CĐS và nền tảng AI.VN SmartWeb.',
-        imageUrl: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80',
+        summary: 'Chiến dịch tập trung vào 11 chỉ tiêu trọng điểm: hỗ trợ kỹ năng số cộng đồng, kích hoạt VNeID mức 2, DVC trực tuyến, thanh toán không tiền mặt QR, thành lập Đội hình Thanh niên số và phổ cập AI.',
+        content: 'Sáng nay, UBND tỉnh phối hợp cùng Ban Thường vụ Tỉnh Đoàn Đắk Lắk đã long trọng tổ chức Lễ phát động "Chiến dịch 44 ngày đêm Thanh niên Đắk Lắk tiên phong Chuyển đổi số năm 2026".\n\nChiến dịch đặt mục tiêu đột phá với 11 chỉ tiêu chiến lược trên toàn bộ 102 xã, phường, thị trấn:\n1. 100% xã/phường thành lập Đội hình Thanh niên số hoạt động tích cực.\n2. Tối thiểu 500 người dân/xã được hướng dẫn kỹ năng số và cài đặt VNeID mức 2.\n3. 100% hồ sơ TTHC đủ điều kiện được nộp qua Cổng Dịch vụ công trực tuyến.\n4. Phổ cập thanh toán mã QR không dùng tiền mặt tại các chợ truyền thống và hộ kinh doanh.\n5. Đào tạo ứng dụng Trí tuệ nhân tạo (AI) trong công việc cho cán bộ cơ sở.\n6. Phổ cập website thương mại điện tử .VN SmartWeb cho thanh niên khởi nghiệp và nông sản OCOP.\n\nPhát biểu chỉ đạo, đại diện UBND tỉnh nhấn mạnh tinh thần "Đi từng ngõ, gõ từng nhà, hướng dẫn từng người dân" để không ai bị bỏ lại phía sau trên hành trình chuyển đổi số.',
+        imageUrl: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=1200&q=80',
+        category: 'Chiến dịch 44 ngày đêm',
+        views: 342,
+        author: canBoTinh._id
+      },
+      {
+        title: 'Đội hình Thanh niên số ra quân hướng dẫn Dịch vụ công và kích hoạt VNeID mức 2',
+        summary: 'Hàng trăm đoàn viên thanh niên đã trực tiếp xuống các buôn làng, khu dân cư để hỗ trợ bà con cài đặt VNeID, nộp hồ sơ DVC và thanh toán trực tuyến.',
+        content: 'Tại các điểm sinh hoạt cộng đồng và UBND các xã, phường, Đội hình Thanh niên số đã thiết lập các "Bàn hướng dẫn chuyển đổi số lưu động". Các bạn trẻ kiên trì hướng dẫn từng cụ già, người dân cách tra cứu thông tin, nộp hồ sơ trực tuyến, thanh toán tiền điện, nước qua ứng dụng ngân hàng và kích hoạt tài khoản định danh điện tử VNeID mức 2.\n\nHoạt động đã nhận được sự hưởng ứng nhiệt tình và đánh giá cao từ người dân địa phương.',
+        imageUrl: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&q=80',
+        category: 'Thanh niên số',
+        views: 215,
+        author: canBoHSV._id
+      },
+      {
+        title: 'Chương trình "Mỗi hộ kinh doanh một Website .VN" - Đột phá thương mại điện tử qua AI.VN SmartWeb',
+        summary: 'Nền tảng AI.VN SmartWeb hỗ trợ miễn phí 100% xây dựng website chuẩn TMĐT và đăng ký tên miền .VN cho tiểu thương, HTX trên địa bàn Đắk Lắk.',
+        content: 'Nhằm thúc đẩy kinh tế số nông thôn và nâng cao năng lực cạnh tranh cho các hộ kinh doanh, nền tảng AI.VN SmartWeb đã ra mắt gói tài trợ đặc biệt trong Chiến dịch 44 ngày đêm.\n\nChỉ với 5 phút khai báo, các chủ cơ sở kinh doanh, HTX cà phê, sầu riêng, macca và các sản phẩm OCOP đặc trưng có ngay một website bán hàng chuyên nghiệp, tích hợp thanh toán online và chatbot AI tư vấn tự động.',
+        imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80',
+        category: 'SmartWeb & AI',
+        views: 189,
+        author: seniorAdmin._id
+      },
+      {
+        title: 'Nhân rộng mô hình "Tuyến phố không tiền mặt" tại trung tâm các huyện, thị xã',
+        summary: '100% tiểu thương, quán ăn, sạp chợ truyền thống cam kết sử dụng mã QR thanh toán không dùng tiền mặt, hướng tới đô thị văn minh hiện đại.',
+        content: 'Đoàn Thanh niên phối hợp với Ngân hàng Nhà nước và các ngân hàng thương mại trên địa bàn tỉnh triển khai phủ kín mã QR động và tĩnh tại các tuyến đường trục chính.\n\nMô hình giúp người dân mua sắm tiện lợi, an toàn, giảm thiểu rủi ro tiền mặt và minh bạch hóa giao dịch kinh doanh.',
+        imageUrl: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?auto=format&fit=crop&w=1200&q=80',
+        category: 'Mô hình điểm',
+        views: 156,
+        author: canBoTruong._id
+      },
+      {
+        title: 'Tập huấn ứng dụng Trí tuệ nhân tạo (AI) cho Cán bộ Đoàn 102 Xã/Phường tỉnh Đắk Lắk',
+        summary: 'Trang bị kỹ năng viết báo cáo tự động, tạo ảnh truyền thông, tóm tắt văn bản và xây dựng trợ lý ảo phục vụ công tác điều hành tại cơ sở.',
+        content: 'Khóa tập huấn chuyên sâu "Ứng dụng AI nâng cao năng suất công tác Đoàn và Quản lý Nhà nước" đã thu hút hơn 300 cán bộ Đoàn và đoàn viên nòng cốt.\n\nCác học viên được thực hành trực tiếp các công cụ AI hiện đại để xử lý dữ liệu báo cáo 11 chỉ tiêu, soạn thảo văn bản, thiết kế infographic truyền thông chiến dịch chỉ trong vài phút.',
+        imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80',
+        category: 'Tập huấn & Đào tạo',
+        views: 278,
+        author: canBoLCH._id
+      },
+      {
+        title: 'Số hóa 100% sản phẩm OCOP Đắk Lắk lên Bản đồ số nông sản và sàn TMĐT',
+        summary: 'Các sản phẩm đặc sản Đắk Lắk như Cà phê Buôn Ma Thuột, Mật ong hoa cà phê, Bơ sáp, Tiêu Đắk Lắk được gắn mã QR truy xuất nguồn gốc số.',
+        content: 'Đoàn khối Nông nghiệp cùng các đội hình tri thức trẻ đã hỗ trợ các chủ thể OCOP hoàn thiện hồ sơ điện tử, chụp ảnh sản phẩm 3D, tích hợp mã QR truy xuất nguồn gốc và đưa sản phẩm lên các sàn thương mại điện tử lớn của Việt Nam.',
+        imageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=80',
+        category: 'Chuyển đổi số',
+        views: 198,
         author: canBoTinh._id
       }
     ]);
