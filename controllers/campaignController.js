@@ -22,10 +22,12 @@ exports.submitReport = async (req, res) => {
       return res.status(403).json({ message: 'Tài khoản không thuộc cơ quan/đơn vị nào.' });
     }
 
-    // 1. Kiểm tra khung giờ (13:00 - 19:00)
-    const currentHour = new Date().getHours();
-    if (currentHour < 13 || currentHour >= 19) {
-      return res.status(403).json({ message: 'Hệ thống chỉ mở cổng nhận báo cáo chiến dịch từ 13:00 đến 19:00 hằng ngày.' });
+    // 1. Kiểm tra khung giờ (13:00 - 18:30 hằng ngày)
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    // 13:00 = 780 phút, 18:30 = 1110 phút
+    if (currentMinutes < 780 || currentMinutes > 1110) {
+      return res.status(403).json({ message: 'Hệ thống chỉ mở cổng nhận và chỉnh sửa báo cáo chiến dịch từ 13:00 đến 18:30 hằng ngày.' });
     }
 
     // 2. Chuẩn hóa ngày hiện tại về 00:00:00
