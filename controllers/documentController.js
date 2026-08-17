@@ -308,11 +308,18 @@ exports.getChildAgenciesStats = async (req, res) => {
         campaign: {
           reportedToday: !!todayReport,
           todayStats: todayReport ? {
-            volunteers: todayReport.volunteers,
-            digitalSkills: todayReport.digitalSkills,
-            vneidSupport: todayReport.vneidSupport,
-            qrSupport: todayReport.qrSupport,
+            digitalSkills: todayReport.digitalSkills || 0,
+            vneidSupport: todayReport.vneidSupport || 0,
+            publicServices: todayReport.publicServices || 0,
+            qrSupport: todayReport.qrSupport || 0,
+            activeTeams: todayReport.activeTeams || 0,
+            trainingClasses: todayReport.trainingClasses || 0,
+            digitalModels: todayReport.digitalModels || 0,
+            digitalProducts: todayReport.digitalProducts || 0,
+            youthTrained: todayReport.youthTrained || 0,
+            youthProjects: todayReport.youthProjects || 0,
             smartwebCount: todayReport.smartwebCount || 0,
+            volunteers: todayReport.volunteers || 0,
           } : null
         },
         smartweb: {

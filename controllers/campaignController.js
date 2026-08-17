@@ -6,10 +6,13 @@ const Agency = require('../models/Agency');
 exports.submitReport = async (req, res) => {
   try {
     const { 
-      reportDate, activeTeams, volunteers, digitalSkills, vneidSupport, 
-      publicServices, qrSupport, trainingClasses, digitalProducts, 
-      youthTrained, safetyCampaigns, mediaPosts,
-      smartwebCount, websitesCreated,
+      reportDate,
+      // 11 CHỈ TIÊU CHÍNH THỨC
+      digitalSkills, vneidSupport, publicServices, qrSupport,
+      activeTeams, trainingClasses, digitalModels, digitalProducts,
+      youthTrained, youthProjects, smartwebCount,
+      // BỔ TRỢ
+      volunteers, safetyCampaigns, mediaPosts, websitesCreated,
       issues, proposals, evidenceLinks 
     } = req.body;
 
@@ -38,19 +41,24 @@ exports.submitReport = async (req, res) => {
       agencyId,
       reporterId: req.user._id,
       reportDate: dateObj,
-      activeTeams: activeTeams || 0,
-      volunteers: volunteers || 0,
-      digitalSkills: digitalSkills || 0,
-      vneidSupport: vneidSupport || 0,
-      publicServices: publicServices || 0,
-      qrSupport: qrSupport || 0,
-      trainingClasses: trainingClasses || 0,
-      digitalProducts: digitalProducts || 0,
-      youthTrained: youthTrained || 0,
-      safetyCampaigns: safetyCampaigns || 0,
-      mediaPosts: mediaPosts || 0,
-      smartwebCount: smartwebCount || 0,
-      websitesCreated: websitesCreated || 0,
+      // 11 CHỈ TIÊU CHÍNH THỨC
+      digitalSkills: Number(digitalSkills) || 0,     // 1. Kỹ năng số
+      vneidSupport: Number(vneidSupport) || 0,       // 2. VNeID
+      publicServices: Number(publicServices) || 0,   // 3. DVC trực tuyến
+      qrSupport: Number(qrSupport) || 0,             // 4. QR thanh toán
+      activeTeams: Number(activeTeams) || 0,         // 5. Đội hình TN số
+      trainingClasses: Number(trainingClasses) || 0, // 6. Lớp tập huấn
+      digitalModels: Number(digitalModels) || 0,     // 7. Mô hình điểm CĐS
+      digitalProducts: Number(digitalProducts) || 0, // 8. Sản phẩm OCOP/địa phương
+      youthTrained: Number(youthTrained) || 0,       // 9. TN tập huấn AI
+      youthProjects: Number(youthProjects) || 0,     // 10. Công trình TN CĐS
+      smartwebCount: Number(smartwebCount) || 0,     // 11. Website SmartWeb
+
+      // Phụ trợ
+      volunteers: Number(volunteers) || 0,
+      safetyCampaigns: Number(safetyCampaigns) || 0,
+      mediaPosts: Number(mediaPosts) || 0,
+      websitesCreated: Number(websitesCreated) || 0,
       issues: issues || '',
       proposals: proposals || '',
       evidenceLinks: evidenceLinks || '',
@@ -84,41 +92,55 @@ exports.getMyReport = async (req, res) => {
   }
 };
 
-// Thống kê lũy kế toàn tỉnh
+// Thống kê lũy kế toàn tỉnh (đầy đủ 11 chỉ tiêu)
 exports.getGlobalStats = async (req, res) => {
   try {
     const stats = await CampaignReport.aggregate([
       {
         $group: {
           _id: null,
-          totalVneid: { $sum: '$vneidSupport' },
-          totalQr: { $sum: '$qrSupport' },
-          totalDigitalSkills: { $sum: '$digitalSkills' },
-          totalPublicServices: { $sum: '$publicServices' },
-          totalSmartWeb: { $sum: '$smartwebCount' },
+          totalDigitalSkills: { $sum: '$digitalSkills' },     // 1. Kỹ năng số
+          totalVneid: { $sum: '$vneidSupport' },              // 2. VNeID
+          totalPublicServices: { $sum: '$publicServices' },   // 3. DVC trực tuyến
+          totalQr: { $sum: '$qrSupport' },                    // 4. QR thanh toán
+          totalActiveTeams: { $sum: '$activeTeams' },         // 5. Đội hình TN số
+          totalTrainingClasses: { $sum: '$trainingClasses' }, // 6. Lớp tập huấn
+          totalDigitalModels: { $sum: '$digitalModels' },     // 7. Mô hình điểm CĐS
+          totalDigitalProducts: { $sum: '$digitalProducts' }, // 8. Sản phẩm OCOP/địa phương
+          totalYouthTrained: { $sum: '$youthTrained' },       // 9. TN tập huấn AI
+          totalYouthProjects: { $sum: '$youthProjects' },     // 10. Công trình TN CĐS
+          totalSmartWeb: { $sum: '$smartwebCount' },          // 11. Website SmartWeb
+          // Phụ trợ
           totalWebsitesCreated: { $sum: '$websitesCreated' },
           totalVolunteers: { $sum: '$volunteers' },
-          totalTrainingClasses: { $sum: '$trainingClasses' },
-          totalYouthTrained: { $sum: '$youthTrained' },
-          totalDigitalProducts: { $sum: '$digitalProducts' }
+          totalSafetyCampaigns: { $sum: '$safetyCampaigns' },
+          totalMediaPosts: { $sum: '$mediaPosts' }
         }
       }
     ]);
 
     const activeAgenciesCount = await CampaignReport.distinct('agencyId').then(arr => arr.length);
     const totalAgencies = await Agency.countDocuments({ level: 'COMMUNE' });
+    const s = stats[0] || {};
 
     res.json({
-      vneid: stats[0]?.totalVneid || 0,
-      qr: stats[0]?.totalQr || 0,
-      digitalSkills: stats[0]?.totalDigitalSkills || 0,
-      publicServices: stats[0]?.totalPublicServices || 0,
-      smartwebCount: stats[0]?.totalSmartWeb || 0,
-      websitesCreated: stats[0]?.totalWebsitesCreated || 0,
-      volunteers: stats[0]?.totalVolunteers || 0,
-      trainingClasses: stats[0]?.totalTrainingClasses || 0,
-      youthTrained: stats[0]?.totalYouthTrained || 0,
-      digitalProducts: stats[0]?.totalDigitalProducts || 0,
+      // 11 chỉ tiêu chính thức
+      digitalSkills: s.totalDigitalSkills || 0,
+      vneid: s.totalVneid || 0,
+      publicServices: s.totalPublicServices || 0,
+      qr: s.totalQr || 0,
+      activeTeams: s.totalActiveTeams || 0,
+      trainingClasses: s.totalTrainingClasses || 0,
+      digitalModels: s.totalDigitalModels || 0,
+      digitalProducts: s.totalDigitalProducts || 0,
+      youthTrained: s.totalYouthTrained || 0,
+      youthProjects: s.totalYouthProjects || 0,
+      smartwebCount: s.totalSmartWeb || 0,
+      // Phụ trợ
+      websitesCreated: s.totalWebsitesCreated || 0,
+      volunteers: s.totalVolunteers || 0,
+      safetyCampaigns: s.totalSafetyCampaigns || 0,
+      mediaPosts: s.totalMediaPosts || 0,
       activeAgencies: activeAgenciesCount,
       totalAgencies: totalAgencies > 0 ? totalAgencies : 102
     });
@@ -147,7 +169,7 @@ exports.getAllReports = async (req, res) => {
   }
 };
 
-// Xuất Excel báo cáo chiến dịch (Tỉnh)
+// Xuất Excel báo cáo chiến dịch (Tỉnh) - Đầy đủ 11 chỉ tiêu
 exports.exportExcel = async (req, res) => {
   try {
     const { date, startDate, endDate } = req.query;
@@ -176,17 +198,22 @@ exports.exportExcel = async (req, res) => {
       { header: 'Đơn vị', key: 'agency', width: 25 },
       { header: 'Người nộp', key: 'reporter', width: 18 },
       { header: 'Ngày báo cáo', key: 'reportDate', width: 15 },
-      { header: 'Số đội hình', key: 'activeTeams', width: 14 },
-      { header: 'Tình nguyện viên', key: 'volunteers', width: 18 },
-      { header: 'Kỹ năng số', key: 'digitalSkills', width: 14 },
-      { header: 'VNeID', key: 'vneidSupport', width: 12 },
-      { header: 'DVC Trực tuyến', key: 'publicServices', width: 16 },
-      { header: 'QR thanh toán', key: 'qrSupport', width: 15 },
-      { header: 'Lớp tập huấn', key: 'trainingClasses', width: 14 },
-      { header: 'Sản phẩm số', key: 'digitalProducts', width: 14 },
-      { header: 'TN tập AI', key: 'youthTrained', width: 12 },
-      { header: 'Đăng ký SmartWeb', key: 'smartwebCount', width: 18 },
-      { header: 'Website active', key: 'websitesCreated', width: 16 },
+      // 11 Chỉ tiêu
+      { header: '1. Kỹ năng số', key: 'digitalSkills', width: 15 },
+      { header: '2. VNeID mức 2', key: 'vneidSupport', width: 15 },
+      { header: '3. DVC Trực tuyến', key: 'publicServices', width: 16 },
+      { header: '4. HKD dùng QR', key: 'qrSupport', width: 15 },
+      { header: '5. Đội hình TN số', key: 'activeTeams', width: 15 },
+      { header: '6. Lớp tập huấn', key: 'trainingClasses', width: 15 },
+      { header: '7. Mô hình CĐS', key: 'digitalModels', width: 15 },
+      { header: '8. SP OCOP/Địa phương', key: 'digitalProducts', width: 18 },
+      { header: '9. TN học AI', key: 'youthTrained', width: 14 },
+      { header: '10. Công trình CĐS', key: 'youthProjects', width: 16 },
+      { header: '11. Web SmartWeb', key: 'smartwebCount', width: 16 },
+      // Phụ trợ
+      { header: 'Tình nguyện viên', key: 'volunteers', width: 16 },
+      { header: 'An toàn số', key: 'safetyCampaigns', width: 14 },
+      { header: 'Bài truyền thông', key: 'mediaPosts', width: 15 },
       { header: 'Khó khăn', key: 'issues', width: 30 },
       { header: 'Đề xuất', key: 'proposals', width: 30 },
     ];
@@ -203,17 +230,20 @@ exports.exportExcel = async (req, res) => {
         agency: r.agencyId?.name || 'Không rõ',
         reporter: r.reporterId?.username || 'Không rõ',
         reportDate: new Date(r.reportDate).toLocaleDateString('vi-VN'),
-        activeTeams: r.activeTeams,
-        volunteers: r.volunteers,
-        digitalSkills: r.digitalSkills,
-        vneidSupport: r.vneidSupport,
-        publicServices: r.publicServices,
-        qrSupport: r.qrSupport,
-        trainingClasses: r.trainingClasses,
-        digitalProducts: r.digitalProducts,
-        youthTrained: r.youthTrained,
+        digitalSkills: r.digitalSkills || 0,
+        vneidSupport: r.vneidSupport || 0,
+        publicServices: r.publicServices || 0,
+        qrSupport: r.qrSupport || 0,
+        activeTeams: r.activeTeams || 0,
+        trainingClasses: r.trainingClasses || 0,
+        digitalModels: r.digitalModels || 0,
+        digitalProducts: r.digitalProducts || 0,
+        youthTrained: r.youthTrained || 0,
+        youthProjects: r.youthProjects || 0,
         smartwebCount: r.smartwebCount || 0,
-        websitesCreated: r.websitesCreated || 0,
+        volunteers: r.volunteers || 0,
+        safetyCampaigns: r.safetyCampaigns || 0,
+        mediaPosts: r.mediaPosts || 0,
         issues: r.issues || '',
         proposals: r.proposals || ''
       });
@@ -227,17 +257,24 @@ exports.exportExcel = async (req, res) => {
     // Tổng cộng
     const totalRow = ws.addRow({
       agency: 'TỔNG CỘNG',
-      activeTeams: reports.reduce((s, r) => s + r.activeTeams, 0),
-      volunteers: reports.reduce((s, r) => s + r.volunteers, 0),
-      digitalSkills: reports.reduce((s, r) => s + r.digitalSkills, 0),
-      vneidSupport: reports.reduce((s, r) => s + r.vneidSupport, 0),
-      publicServices: reports.reduce((s, r) => s + r.publicServices, 0),
-      qrSupport: reports.reduce((s, r) => s + r.qrSupport, 0),
-      trainingClasses: reports.reduce((s, r) => s + r.trainingClasses, 0),
-      digitalProducts: reports.reduce((s, r) => s + r.digitalProducts, 0),
-      youthTrained: reports.reduce((s, r) => s + r.youthTrained, 0),
+      reporter: '',
+      reportDate: `${reports.length} báo cáo`,
+      digitalSkills: reports.reduce((s, r) => s + (r.digitalSkills || 0), 0),
+      vneidSupport: reports.reduce((s, r) => s + (r.vneidSupport || 0), 0),
+      publicServices: reports.reduce((s, r) => s + (r.publicServices || 0), 0),
+      qrSupport: reports.reduce((s, r) => s + (r.qrSupport || 0), 0),
+      activeTeams: reports.reduce((s, r) => s + (r.activeTeams || 0), 0),
+      trainingClasses: reports.reduce((s, r) => s + (r.trainingClasses || 0), 0),
+      digitalModels: reports.reduce((s, r) => s + (r.digitalModels || 0), 0),
+      digitalProducts: reports.reduce((s, r) => s + (r.digitalProducts || 0), 0),
+      youthTrained: reports.reduce((s, r) => s + (r.youthTrained || 0), 0),
+      youthProjects: reports.reduce((s, r) => s + (r.youthProjects || 0), 0),
       smartwebCount: reports.reduce((s, r) => s + (r.smartwebCount || 0), 0),
-      websitesCreated: reports.reduce((s, r) => s + (r.websitesCreated || 0), 0)
+      volunteers: reports.reduce((s, r) => s + (r.volunteers || 0), 0),
+      safetyCampaigns: reports.reduce((s, r) => s + (r.safetyCampaigns || 0), 0),
+      mediaPosts: reports.reduce((s, r) => s + (r.mediaPosts || 0), 0),
+      issues: '',
+      proposals: ''
     });
     totalRow.eachCell(cell => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3E0' } };
@@ -255,7 +292,7 @@ exports.exportExcel = async (req, res) => {
   }
 };
 
-// Tổng kết DTI — Chỉ số Chuyển đổi số tỉnh
+// Tổng kết DTI — Chỉ số Chuyển đổi số tỉnh (đầy đủ 11 chỉ tiêu)
 exports.getDtiSummary = async (req, res) => {
   try {
     const SmartwebRegistration = require('../models/SmartwebRegistration');
@@ -264,16 +301,19 @@ exports.getDtiSummary = async (req, res) => {
       CampaignReport.aggregate([{
         $group: {
           _id: null,
-          totalVneid: { $sum: '$vneidSupport' },
-          totalQr: { $sum: '$qrSupport' },
-          totalDigitalSkills: { $sum: '$digitalSkills' },
-          totalPublicServices: { $sum: '$publicServices' },
-          totalSmartWebReported: { $sum: '$smartwebCount' },
+          totalDigitalSkills: { $sum: '$digitalSkills' },     // 1. Kỹ năng số
+          totalVneid: { $sum: '$vneidSupport' },              // 2. VNeID
+          totalPublicServices: { $sum: '$publicServices' },   // 3. DVC
+          totalQr: { $sum: '$qrSupport' },                    // 4. QR thanh toán
+          totalActiveTeams: { $sum: '$activeTeams' },         // 5. Đội hình TN số
+          totalTrainingClasses: { $sum: '$trainingClasses' }, // 6. Lớp tập huấn
+          totalDigitalModels: { $sum: '$digitalModels' },     // 7. Mô hình điểm CĐS
+          totalDigitalProducts: { $sum: '$digitalProducts' }, // 8. Sản phẩm số hóa
+          totalYouthTrained: { $sum: '$youthTrained' },       // 9. TN học AI
+          totalYouthProjects: { $sum: '$youthProjects' },     // 10. Công trình TN CĐS
+          totalSmartWebReported: { $sum: '$smartwebCount' },  // 11. Website SmartWeb
           totalWebsitesReported: { $sum: '$websitesCreated' },
           totalVolunteers: { $sum: '$volunteers' },
-          totalYouthTrained: { $sum: '$youthTrained' },
-          totalDigitalProducts: { $sum: '$digitalProducts' },
-          totalTrainingClasses: { $sum: '$trainingClasses' },
           totalMediaPosts: { $sum: '$mediaPosts' },
           totalSafetyCampaigns: { $sum: '$safetyCampaigns' },
           reportCount: { $sum: 1 }
@@ -293,24 +333,29 @@ exports.getDtiSummary = async (req, res) => {
     const s = smartwebStats[0] || {};
 
     res.json({
-      // Nhóm 1: Kỹ năng số
+      // 11 chỉ tiêu chính thức
       digitalSkills: c.totalDigitalSkills || 0,
-      youthTrained: c.totalYouthTrained || 0,
-      trainingClasses: c.totalTrainingClasses || 0,
-      // Nhóm 2: Dịch vụ công
       vneid: c.totalVneid || 0,
       publicServices: c.totalPublicServices || 0,
-      // Nhóm 3: Kinh tế số
       qr: c.totalQr || 0,
+      activeTeams: c.totalActiveTeams || 0,
+      trainingClasses: c.totalTrainingClasses || 0,
+      digitalModels: c.totalDigitalModels || 0,
       digitalProducts: c.totalDigitalProducts || 0,
+      youthTrained: c.totalYouthTrained || 0,
+      youthProjects: c.totalYouthProjects || 0,
+      smartwebCount: Math.max(c.totalSmartWebReported || 0, s.total || 0),
+
+      // Dữ liệu mở rộng SmartWeb
       smartwebRegistrations: s.total || 0,
       smartwebActive: s.active || 0,
       smartwebRegistered: s.registered || 0,
-      // Nhóm 4: Truyền thông
+      websitesCreated: c.totalWebsitesReported || 0,
+
+      // Phụ trợ
+      volunteers: c.totalVolunteers || 0,
       mediaPosts: c.totalMediaPosts || 0,
       safetyCampaigns: c.totalSafetyCampaigns || 0,
-      // Tổng hợp
-      volunteers: c.totalVolunteers || 0,
       reportCount: c.reportCount || 0
     });
   } catch (error) {

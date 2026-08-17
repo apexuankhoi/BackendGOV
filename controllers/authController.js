@@ -133,7 +133,10 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email }).populate('agencyId', 'name level');
+    const cleanEmail = (email || '').trim();
+    const user = await User.findOne({ 
+      email: { $regex: new RegExp(`^${cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } 
+    }).populate('agencyId', 'name level');
     if (!user) return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
