@@ -39,7 +39,7 @@ exports.submitReport = async (req, res) => {
 
     const updateData = {
       agencyId,
-      reporterId: req.user._id,
+      reporterId: req.user?.userId || req.user?._id,
       reportDate: dateObj,
       // 11 CHỈ TIÊU CHÍNH THỨC
       digitalSkills: Number(digitalSkills) || 0,     // 1. Kỹ năng số

@@ -197,7 +197,7 @@ exports.updateRequest = async (req, res) => {
     if (resolution) {
       request.resolution = resolution;
       request.resolvedAt = new Date();
-      request.resolvedBy = req.user._id;
+      request.resolvedBy = req.user?.userId || req.user?._id;
     }
     if (rejectionReason) {
       request.rejectionReason = rejectionReason;

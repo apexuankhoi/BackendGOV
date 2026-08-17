@@ -6,6 +6,8 @@ module.exports = (req, res, next) => {
 
   try {
     const verified = jwt.verify(token.replace('Bearer ', ''), process.env.JWT_SECRET || 'webgov_secret_key_12345');
+    if (verified.userId && !verified._id) verified._id = verified.userId;
+    if (verified._id && !verified.userId) verified.userId = verified._id;
     req.user = verified;
     next();
   } catch (err) {
