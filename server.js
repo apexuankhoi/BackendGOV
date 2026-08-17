@@ -86,8 +86,13 @@ io.on('connection', (socket) => {
 });
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/webgov_daklak')
-  .then(() => {
+  .then(async () => {
     console.log('✅ Đã kết nối MongoDB');
+    
+    // Tự động quét và đồng bộ Đội hình Thanh niên số từ các báo cáo chiến dịch đã nộp
+    const { syncAllTeamsFromReports } = require('./utils/syncTeamsHelper');
+    await syncAllTeamsFromReports();
+
     server.listen(PORT, async () => {
       console.log(`🚀 Server đang chạy tại port ${PORT}`);
       console.log(`🌐 WebSocket Server đang lắng nghe!`);

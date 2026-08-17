@@ -1,4 +1,5 @@
 const Team = require('../models/Team');
+const { syncAllTeamsFromReports } = require('../utils/syncTeamsHelper');
 
 exports.createTeam = async (req, res) => {
   try {
@@ -27,10 +28,26 @@ exports.getTeams = async (req, res) => {
         query.status = 'APPROVED';
     }
 
-    const teams = await Team.find(query).populate('createdBy', 'username email');
+    let teams = await Team.find(query).populate('createdBy', 'username email');
+    
+    // Nếu danh sách đội hình đang trống, tự động quét báo cáo chiến dịch để khởi tạo
+    if (teams.length === 0) {
+      await syncAllTeamsFromReports();
+      teams = await Team.find(query).populate('createdBy', 'username email');
+    }
+
     res.json(teams);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+exports.syncTeams = async (req, res) => {
+  try {
+    const result = await syncAllTeamsFromReports();
+    res.json({ message: `Đã quét và đồng bộ thành công ${result.syncedCount} đội hình`, ...result });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi đồng bộ đội hình', error: err.message });
   }
 };
 

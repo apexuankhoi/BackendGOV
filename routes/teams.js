@@ -19,6 +19,7 @@ router.get('/admin', authMiddleware, teamController.getTeams);
 
 // Các route bên dưới cần đăng nhập
 router.post('/', authMiddleware, teamController.createTeam);
+router.post('/sync', authMiddleware, checkApprover, teamController.syncTeams);
 
 // Tỉnh duyệt — BẮT BUỘC kiểm tra Role
 router.put('/:id/approve', authMiddleware, checkApprover, teamController.approveTeam);

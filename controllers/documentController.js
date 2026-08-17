@@ -68,6 +68,13 @@ exports.createDocument = async (req, res) => {
   try {
     const data = { ...req.body, createdBy: req.user.userId, agencyId: req.user.agencyId || null };
     
+    // Tự động gán cơ quan ban hành nếu chưa có
+    if (!data.issuingAgency && req.user.agencyId) {
+      const Agency = require('../models/Agency');
+      const userAgency = await Agency.findById(req.user.agencyId);
+      if (userAgency) data.issuingAgency = userAgency.name;
+    }
+
     // Xử lý file đính kèm
     if (req.files && req.files.length > 0) {
       data.attachments = req.files.map(f => ({
@@ -199,20 +206,32 @@ exports.dispatchDocument = async (req, res) => {
       return res.status(400).json({ message: 'Cần chọn ít nhất 1 cơ quan nhận' });
     }
 
-    const doc = await Document.findOne({ _id: id, agencyId: req.user.agencyId });
+    const findQuery = { _id: id };
+    if (req.user.role !== 'SENIOR_ADMIN' && req.user.role !== 'ADMIN' && req.user.agencyId) {
+      findQuery.$or = [{ agencyId: req.user.agencyId }, { createdBy: req.user.userId }];
+    }
+
+    const doc = await Document.findOne(findQuery);
     if (!doc) return res.status(404).json({ message: 'Không tìm thấy văn bản' });
 
+    let issuingAgencyName = doc.issuingAgency;
+    if (!issuingAgencyName && req.user.agencyId) {
+      const Agency = require('../models/Agency');
+      const ag = await Agency.findById(req.user.agencyId);
+      if (ag) issuingAgencyName = ag.name;
+    }
+
     // Tạo các bản sao văn bản cho từng cơ quan nhận (Trở thành Văn bản đến của họ)
-    const promises = targetAgencyIds.map(agencyId => {
+    const promises = targetAgencyIds.map(targetAgencyId => {
       return Document.create({
         type: 'INCOMING',
-        agencyId: agencyId,
-        fromAgencyId: req.user.agencyId,
+        agencyId: targetAgencyId,
+        fromAgencyId: req.user.agencyId || null,
         isInternal: false,
         documentNumber: doc.documentNumber,
         issuedDate: doc.issuedDate || new Date(),
         receivedDate: new Date(),
-        issuingAgency: doc.issuingAgency,
+        issuingAgency: issuingAgencyName || 'Đơn vị phát hành',
         signer: doc.signer,
         signerTitle: doc.signerTitle,
         summary: doc.summary,
@@ -233,9 +252,17 @@ exports.dispatchDocument = async (req, res) => {
     doc.isInternal = false;
     await doc.save();
 
+    // Ghi log liên thông
+    await ActivityLog.create({
+      user: req.user.userId,
+      action: 'DISPATCH_DOCUMENT',
+      target: `Văn bản #${doc.documentNumber || doc._id}`,
+      details: `Gửi liên thông tới ${targetAgencyIds.length} cơ quan đơn vị`
+    });
+
     res.json({ message: `Đã gửi liên thông thành công tới ${targetAgencyIds.length} cơ quan` });
   } catch (err) {
-    res.status(500).json({ message: 'Lỗi gửi liên thông', error: err.message });
+    res.status(500).json({ message: 'Lỗi gửi liên thông: ' + err.message });
   }
 };
 
