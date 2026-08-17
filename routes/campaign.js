@@ -6,6 +6,10 @@ const authMiddleware = require('../middleware/authMiddleware');
 // Public route: Lấy số liệu tổng hợp toàn tỉnh
 router.get('/stats', campaignController.getGlobalStats);
 
+// Cấu hình khung giờ mở/đóng và hạn sửa báo cáo
+router.get('/config', campaignController.getReportingConfig);
+router.put('/config', authMiddleware, campaignController.updateReportingConfig);
+
 // Protected routes (Dành cho cấp xã báo cáo)
 router.post('/report', authMiddleware, campaignController.submitReport);
 router.get('/report', authMiddleware, campaignController.getMyReport);

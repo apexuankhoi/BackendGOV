@@ -2,6 +2,30 @@ const CampaignReport = require('../models/CampaignReport');
 const ExcelJS = require('exceljs');
 const Agency = require('../models/Agency');
 const Team = require('../models/Team');
+const SystemConfig = require('../models/SystemConfig');
+const ActivityLog = require('../models/ActivityLog');
+
+// Helper parse "HH:mm" thành số phút trong ngày
+function parseTimeToMinutes(timeStr, defaultMinutes) {
+  if (!timeStr || !timeStr.includes(':')) return defaultMinutes;
+  const [h, m] = timeStr.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return defaultMinutes;
+  return h * 60 + m;
+}
+
+// Lấy hoặc tạo cấu hình mặc định
+async function getCampaignReportingConfig() {
+  let config = await SystemConfig.findOne({ key: 'campaign_reporting' });
+  if (!config) {
+    config = await SystemConfig.create({
+      key: 'campaign_reporting',
+      openTime: '13:00',
+      closeTime: '18:30',
+      alwaysOpen: false
+    });
+  }
+  return config;
+}
 
 // Gửi báo cáo hằng ngày (hoặc cập nhật nếu đã có trong ngày)
 exports.submitReport = async (req, res) => {
@@ -22,12 +46,21 @@ exports.submitReport = async (req, res) => {
       return res.status(403).json({ message: 'Tài khoản không thuộc cơ quan/đơn vị nào.' });
     }
 
-    // 1. Kiểm tra khung giờ (13:00 - 18:30 hằng ngày)
+    // 1. Kiểm tra khung giờ từ Cấu hình Động của Hệ thống
+    const config = await getCampaignReportingConfig();
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    // 13:00 = 780 phút, 18:30 = 1110 phút
-    if (currentMinutes < 780 || currentMinutes > 1110) {
-      return res.status(403).json({ message: 'Hệ thống chỉ mở cổng nhận và chỉnh sửa báo cáo chiến dịch từ 13:00 đến 18:30 hằng ngày.' });
+
+    if (!config.alwaysOpen) {
+      const openMinutes = parseTimeToMinutes(config.openTime, 13 * 60);
+      const closeMinutes = parseTimeToMinutes(config.closeTime, 18 * 60 + 30);
+
+      if (currentMinutes < openMinutes || currentMinutes > closeMinutes) {
+        return res.status(403).json({ 
+          message: `Hệ thống chỉ mở cổng nhận và chỉnh sửa báo cáo chiến dịch từ ${config.openTime} đến ${config.closeTime} hằng ngày.`,
+          config: { openTime: config.openTime, closeTime: config.closeTime, alwaysOpen: config.alwaysOpen }
+        });
+      }
     }
 
     // 2. Chuẩn hóa ngày hiện tại về 00:00:00
@@ -445,5 +478,73 @@ exports.getDtiSummary = async (req, res) => {
   } catch (error) {
     console.error('Error getDtiSummary:', error);
     res.status(500).json({ message: 'Lỗi server' });
+  }
+};
+
+// Lấy cấu hình khung giờ nhận/sửa báo cáo hiện tại
+exports.getReportingConfig = async (req, res) => {
+  try {
+    const config = await getCampaignReportingConfig();
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const openMinutes = parseTimeToMinutes(config.openTime, 13 * 60);
+    const closeMinutes = parseTimeToMinutes(config.closeTime, 18 * 60 + 30);
+    const isOpenNow = config.alwaysOpen || (currentMinutes >= openMinutes && currentMinutes <= closeMinutes);
+
+    res.json({
+      openTime: config.openTime || '13:00',
+      closeTime: config.closeTime || '18:30',
+      alwaysOpen: !!config.alwaysOpen,
+      customNotice: config.customNotice || '',
+      isOpenNow,
+      updatedAt: config.updatedAt
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi lấy cấu hình khung giờ: ' + err.message });
+  }
+};
+
+// Cập nhật cấu hình khung giờ (Dành cho Super Admin & Tỉnh)
+exports.updateReportingConfig = async (req, res) => {
+  try {
+    if (req.user.role !== 'SENIOR_ADMIN' && req.user.role !== 'ADMIN' && req.user.role !== 'PROVINCE_ADMIN') {
+      return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa cấu hình hệ thống.' });
+    }
+
+    const { openTime, closeTime, alwaysOpen, customNotice } = req.body;
+    
+    // Validate format HH:mm
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (openTime && !timeRegex.test(openTime)) {
+      return res.status(400).json({ message: 'Giờ mở cổng không đúng định dạng (HH:mm, ví dụ: 13:00)' });
+    }
+    if (closeTime && !timeRegex.test(closeTime)) {
+      return res.status(400).json({ message: 'Giờ đóng cổng không đúng định dạng (HH:mm, ví dụ: 18:30)' });
+    }
+
+    const updated = await SystemConfig.findOneAndUpdate(
+      { key: 'campaign_reporting' },
+      {
+        openTime: openTime || '13:00',
+        closeTime: closeTime || '18:30',
+        alwaysOpen: Boolean(alwaysOpen),
+        customNotice: customNotice || '',
+        updatedBy: req.user.userId || req.user._id,
+        updatedAt: Date.now()
+      },
+      { upsert: true, returnDocument: 'after' }
+    );
+
+    // Ghi log hoạt động
+    await ActivityLog.create({
+      user: req.user.userId || req.user._id,
+      action: 'UPDATE_CONFIG',
+      target: 'Cấu hình Khung giờ Báo cáo Chiến dịch',
+      details: `Giờ mở: ${updated.openTime}, Giờ đóng/hạn sửa: ${updated.closeTime}, Luôn mở: ${updated.alwaysOpen}`
+    });
+
+    res.json({ message: 'Cập nhật cấu hình khung giờ báo cáo thành công!', config: updated });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi cập nhật cấu hình: ' + err.message });
   }
 };
