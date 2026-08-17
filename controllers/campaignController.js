@@ -21,10 +21,10 @@ exports.submitReport = async (req, res) => {
       return res.status(403).json({ message: 'Tài khoản không thuộc cơ quan/đơn vị nào.' });
     }
 
-    // 1. Kiểm tra khung giờ (18:00 - 20:00)
+    // 1. Kiểm tra khung giờ (13:00 - 19:00)
     const currentHour = new Date().getHours();
-    if (currentHour < 18 || currentHour >= 20) {
-      return res.status(403).json({ message: 'Hệ thống chỉ mở cổng nhận báo cáo chiến dịch từ 18:00 đến 20:00 hằng ngày.' });
+    if (currentHour < 13 || currentHour >= 19) {
+      return res.status(403).json({ message: 'Hệ thống chỉ mở cổng nhận báo cáo chiến dịch từ 13:00 đến 19:00 hằng ngày.' });
     }
 
     // 2. Chuẩn hóa ngày hiện tại về 00:00:00
@@ -34,7 +34,7 @@ exports.submitReport = async (req, res) => {
     // 3. Kiểm tra xem đã nộp báo cáo hôm nay chưa
     const existingReport = await CampaignReport.findOne({ agencyId, reportDate: dateObj });
     if (existingReport) {
-      return res.status(403).json({ message: 'Bạn đã nộp báo cáo chiến dịch cho ngày hôm nay rồi. Vui lòng quay lại vào 18h00 ngày mai!' });
+      return res.status(403).json({ message: 'Bạn đã nộp báo cáo chiến dịch cho ngày hôm nay rồi. Vui lòng quay lại vào 13h00 ngày mai!' });
     }
 
     const updateData = {
