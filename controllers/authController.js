@@ -173,7 +173,11 @@ exports.refreshToken = async (req, res) => {
     jwt.verify(refreshToken, SECRET, (err, decoded) => {
       if (err) return res.status(403).json({ message: 'Invalid refresh token' });
       
-      const newToken = jwt.sign({ userId: decoded.userId, role: decoded.role }, SECRET, { expiresIn: '15m' });
+      const newToken = jwt.sign({ 
+        userId: decoded.userId, 
+        role: decoded.role, 
+        agencyId: decoded.agencyId || null 
+      }, SECRET, { expiresIn: '7d' });
       res.json({ token: newToken });
     });
   } catch (err) {

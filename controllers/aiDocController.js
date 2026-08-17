@@ -427,9 +427,9 @@ exports.aiGenerateReport = async (req, res) => {
     const docsOutgoing = await Document.countDocuments({ ...filter, type: 'OUTGOING' });
     const docsTotal    = docsIncoming + docsOutgoing;
     const tasksTotal   = await Task.countDocuments(filter);
-    const tasksDone    = await Task.countDocuments({ ...filter, status: 'DONE' });
-    const tasksOverdue = await Task.countDocuments({ ...filter, status: 'OVERDUE' });
-    const tasksInProg  = await Task.countDocuments({ ...filter, status: 'IN_PROGRESS' });
+    const tasksDone    = await Task.countDocuments({ ...filter, status: 'Hoàn thành' });
+    const tasksOverdue = await Task.countDocuments({ ...filter, status: 'Quá hạn' });
+    const tasksInProg  = await Task.countDocuments({ ...filter, status: 'Đang thực hiện' });
 
     const docList = await Document.find(filter).sort({ createdAt: -1 }).limit(15)
       .select('documentNumber issuingAgency summary category urgency status type');

@@ -68,7 +68,7 @@ exports.approveDocument = async (req, res) => {
   try {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: 'Khong tim thay van ban' });
-    doc.status = 'Hoan thanh';
+    doc.status = 'Hoàn thành';
     doc.issuedDate = new Date();
     await doc.save();
     await ActivityLog.create({
@@ -220,11 +220,11 @@ exports.aiNaturalQuery = async (req, res) => {
     const scope = req.user.agencyId ? { agencyId: req.user.agencyId } : {};
     const totalIncoming = await Document.countDocuments({ ...scope, type: 'INCOMING' });
     const totalOutgoing = await Document.countDocuments({ ...scope, type: 'OUTGOING' });
-    const pendingDocs = await Document.countDocuments({ ...scope, status: 'Cho xu ly' });
-    const overdueDocs = await Document.countDocuments({ ...scope, status: 'Qua han' });
+    const pendingDocs = await Document.countDocuments({ ...scope, status: 'Chờ xử lý' });
+    const overdueDocs = await Document.countDocuments({ ...scope, status: 'Quá hạn' });
     const totalTasks = await Task.countDocuments(scope);
-    const doneTasks = await Task.countDocuments({ ...scope, status: 'Hoan thanh' });
-    const overdueTasks = await Task.countDocuments({ ...scope, status: 'Qua han' });
+    const doneTasks = await Task.countDocuments({ ...scope, status: 'Hoàn thành' });
+    const overdueTasks = await Task.countDocuments({ ...scope, status: 'Quá hạn' });
 
     // Lay 20 van ban gan nhat cua CO QUAN
     const recentDocs = await Document.find(scope).sort({ createdAt: -1 }).limit(20).select('documentNumber issuingAgency summary category status urgency deadline createdAt type field');
@@ -284,11 +284,11 @@ exports.getStaffKPI = async (req, res) => {
 
     for (const user of users) {
       const assigned = await Document.countDocuments({ assignedTo: user._id });
-      const completed = await Document.countDocuments({ assignedTo: user._id, status: 'Hoan thanh' });
-      const overdue = await Document.countDocuments({ assignedTo: user._id, status: 'Qua han' });
+      const completed = await Document.countDocuments({ assignedTo: user._id, status: 'Hoàn thành' });
+      const overdue = await Document.countDocuments({ assignedTo: user._id, status: 'Quá hạn' });
       const tasksTotal = await Task.countDocuments({ assignedTo: user._id });
-      const tasksDone = await Task.countDocuments({ assignedTo: user._id, status: 'Hoan thanh' });
-      const tasksOverdue = await Task.countDocuments({ assignedTo: user._id, status: 'Qua han' });
+      const tasksDone = await Task.countDocuments({ assignedTo: user._id, status: 'Hoàn thành' });
+      const tasksOverdue = await Task.countDocuments({ assignedTo: user._id, status: 'Quá hạn' });
 
       const completionRate = assigned > 0 ? Math.round((completed / assigned) * 100) : 0;
       const taskCompletionRate = tasksTotal > 0 ? Math.round((tasksDone / tasksTotal) * 100) : 0;
@@ -331,11 +331,11 @@ exports.aiEvaluateKPI = async (req, res) => {
     let kpiSummary = '';
     for (const user of users) {
       const assigned = await Document.countDocuments({ assignedTo: user._id });
-      const completed = await Document.countDocuments({ assignedTo: user._id, status: 'Hoan thanh' });
-      const overdue = await Document.countDocuments({ assignedTo: user._id, status: 'Qua han' });
+      const completed = await Document.countDocuments({ assignedTo: user._id, status: 'Hoàn thành' });
+      const overdue = await Document.countDocuments({ assignedTo: user._id, status: 'Quá hạn' });
       const tasksTotal = await Task.countDocuments({ assignedTo: user._id });
-      const tasksDone = await Task.countDocuments({ assignedTo: user._id, status: 'Hoan thanh' });
-      kpiSummary += `- ${user.username} (${user.role}): VB giao=${assigned}, hoan thanh=${completed}, qua han=${overdue}. CV: tong=${tasksTotal}, xong=${tasksDone}\n`;
+      const tasksDone = await Task.countDocuments({ assignedTo: user._id, status: 'Hoàn thành' });
+      kpiSummary += `- ${user.username} (${user.role}): VB giao=${assigned}, hoàn thành=${completed}, quá hạn=${overdue}. CV: tổng=${tasksTotal}, xong=${tasksDone}\n`;
     }
 
     const prompt = `Ban la Giam doc So Noi vu, hay danh gia KPI cua cac can bo sau:

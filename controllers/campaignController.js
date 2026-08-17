@@ -31,12 +31,6 @@ exports.submitReport = async (req, res) => {
     const dateObj = new Date();
     dateObj.setHours(0, 0, 0, 0);
 
-    // 3. Kiểm tra xem đã nộp báo cáo hôm nay chưa
-    const existingReport = await CampaignReport.findOne({ agencyId, reportDate: dateObj });
-    if (existingReport) {
-      return res.status(403).json({ message: 'Bạn đã nộp báo cáo chiến dịch cho ngày hôm nay rồi. Vui lòng quay lại vào 13h00 ngày mai!' });
-    }
-
     const updateData = {
       agencyId,
       reporterId: req.user?.userId || req.user?._id,
@@ -65,7 +59,11 @@ exports.submitReport = async (req, res) => {
       updatedAt: Date.now()
     };
 
-    const report = await CampaignReport.create(updateData);
+    const report = await CampaignReport.findOneAndUpdate(
+      { agencyId, reportDate: dateObj },
+      updateData,
+      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
+    );
 
     res.json({ message: 'Lưu báo cáo thành công', report });
   } catch (error) {

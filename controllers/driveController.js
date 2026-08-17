@@ -104,7 +104,15 @@ exports.uploadFile = async (req, res) => {
 exports.uploadNewVersion = async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'Vui lòng chọn file' });
-    const file = await SharedFile.findOne({ _id: req.params.id, agencyId: req.user.agencyId });
+    const query = { _id: req.params.id };
+    if (req.user.agencyId) {
+      query.$or = [{ agencyId: req.user.agencyId }, { uploadedBy: req.user.userId, isPersonal: true }];
+    } else {
+      query.uploadedBy = req.user.userId;
+      query.isPersonal = true;
+    }
+
+    const file = await SharedFile.findOne(query);
     if (!file || file.isFolder) return res.status(404).json({ message: 'Không tìm thấy file' });
     
     // Lưu bản cũ vào versions
@@ -135,7 +143,15 @@ exports.uploadNewVersion = async (req, res) => {
 // Xóa file/folder
 exports.deleteFile = async (req, res) => {
   try {
-    const file = await SharedFile.findOneAndDelete({ _id: req.params.id, agencyId: req.user.agencyId });
+    const query = { _id: req.params.id };
+    if (req.user.agencyId) {
+      query.$or = [{ agencyId: req.user.agencyId }, { uploadedBy: req.user.userId, isPersonal: true }];
+    } else {
+      query.uploadedBy = req.user.userId;
+      query.isPersonal = true;
+    }
+
+    const file = await SharedFile.findOneAndDelete(query);
     if (!file) return res.status(404).json({ message: 'Không tìm thấy' });
     res.json({ message: 'Đã xóa thành công' });
   } catch (err) {

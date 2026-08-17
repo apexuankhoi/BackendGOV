@@ -85,10 +85,10 @@ async function getSystemStats(agencyId, from, to) {
   const [docsIncoming, docsOutgoing, tasksDone, tasksTotal, tasksOverdue, tasksInProgress] = await Promise.all([
     Document.countDocuments({ ...filter, type: 'INCOMING' }),
     Document.countDocuments({ ...filter, type: 'OUTGOING' }),
-    Task.countDocuments({ ...filter, status: 'DONE' }),
+    Task.countDocuments({ ...filter, status: 'Hoàn thành' }),
     Task.countDocuments(filter),
-    Task.countDocuments({ ...filter, status: 'OVERDUE' }),
-    Task.countDocuments({ ...filter, status: 'IN_PROGRESS' }),
+    Task.countDocuments({ ...filter, status: 'Quá hạn' }),
+    Task.countDocuments({ ...filter, status: 'Đang thực hiện' }),
   ]);
 
   // Lấy danh sách VB + CV tiêu biểu

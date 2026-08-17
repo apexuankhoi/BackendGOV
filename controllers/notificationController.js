@@ -50,11 +50,12 @@ exports.getNotificationSummary = async (req, res) => {
     });
 
     urgentDocs.forEach(d => {
+      const docLabel = d.summary || (d.documentNumber ? `Số ${d.documentNumber}` : 'Văn bản mới');
       notifications.push({
         id: d._id,
         type: 'document',
         title: `Văn bản ${d.urgency}`,
-        message: `Có văn bản đến: "${d.title}" cần xử lý ngay.`,
+        message: `Có văn bản đến: "${docLabel}" cần xử lý ngay.`,
         date: d.createdAt,
         isRead: false
       });
