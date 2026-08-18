@@ -364,15 +364,24 @@ Dinh dang Markdown, chuyen nghiep, co bang tong hop cuoi cung.`;
 
 exports.crossAgencySynthesis = async (req, res) => {
   try {
-    const { agencyId } = req.user;
-    if (!agencyId) return res.status(403).json({ message: 'Chưa có cơ quan' });
-
+    let { agencyId } = req.user;
     const Document = require('../models/Document');
     const Agency = require('../models/Agency');
-    
+
+    // Nếu tài khoản là SENIOR_ADMIN, ADMIN hoặc PROVINCE_ADMIN mà chưa có agencyId
+    if (!agencyId && ['SENIOR_ADMIN', 'ADMIN', 'PROVINCE_ADMIN'].includes(req.user.role)) {
+      const provinceAgency = await Agency.findOne({ level: 'PROVINCE', parentAgency: null }) || await Agency.findOne({ level: 'PROVINCE' });
+      if (provinceAgency) agencyId = provinceAgency._id;
+    }
+
+    if (!agencyId) return res.status(403).json({ message: 'Chưa có cơ quan' });
+
     // Tìm tất cả các xã trực thuộc Tỉnh hiện tại
-    const childAgencies = await Agency.find({ parentAgency: agencyId });
-    if (childAgencies.length === 0) {
+    let childAgencies = await Agency.find({ parentAgency: agencyId });
+    if ((!childAgencies || childAgencies.length === 0) && ['SENIOR_ADMIN', 'ADMIN', 'PROVINCE_ADMIN'].includes(req.user.role)) {
+      childAgencies = await Agency.find({ level: { $in: ['COMMUNE', 'DISTRICT'] } });
+    }
+    if (!childAgencies || childAgencies.length === 0) {
       return res.status(400).json({ message: 'Không tìm thấy cơ quan cấp dưới nào' });
     }
     const childIds = childAgencies.map(a => a._id);

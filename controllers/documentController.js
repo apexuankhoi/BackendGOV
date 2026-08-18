@@ -269,16 +269,28 @@ exports.dispatchDocument = async (req, res) => {
 // ================= Giai đoạn 4: Quan sát Tuyến dưới (Dành cho cấp Tỉnh) =================
 exports.getChildAgenciesStats = async (req, res) => {
   try {
-    const { agencyId } = req.user;
-    if (!agencyId) return res.status(403).json({ message: 'Chưa có cơ quan' });
-
+    let { agencyId } = req.user;
     const Agency = require('../models/Agency');
     const Task = require('../models/Task');
     const CampaignReport = require('../models/CampaignReport');
     const SmartwebRegistration = require('../models/SmartwebRegistration');
 
+    // Nếu tài khoản là SENIOR_ADMIN, ADMIN hoặc PROVINCE_ADMIN mà chưa có agencyId
+    if (!agencyId && ['SENIOR_ADMIN', 'ADMIN', 'PROVINCE_ADMIN'].includes(req.user.role)) {
+      const provinceAgency = await Agency.findOne({ level: 'PROVINCE', parentAgency: null }) || await Agency.findOne({ level: 'PROVINCE' });
+      if (provinceAgency) agencyId = provinceAgency._id;
+    }
+
+    if (!agencyId) return res.status(403).json({ message: 'Chưa có cơ quan' });
+
     // Tìm các cơ quan cấp dưới
-    const childAgencies = await Agency.find({ parentAgency: agencyId }).sort({ name: 1 });
+    let childAgencies = await Agency.find({ parentAgency: agencyId }).sort({ name: 1 });
+    
+    // Nếu là cấp quản lý Tỉnh/Admin nhưng không tìm thấy con theo parentAgency, fallback lấy tất cả các xã/phường
+    if ((!childAgencies || childAgencies.length === 0) && ['SENIOR_ADMIN', 'ADMIN', 'PROVINCE_ADMIN'].includes(req.user.role)) {
+      childAgencies = await Agency.find({ level: { $in: ['COMMUNE', 'DISTRICT'] } }).sort({ name: 1 });
+    }
+
     if (!childAgencies || childAgencies.length === 0) {
       return res.json({ agencies: [] });
     }

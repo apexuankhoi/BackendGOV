@@ -85,7 +85,7 @@ io.on('connection', (socket) => {
   });
 });
 
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/webgov_daklak')
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/webgov_daklak')
   .then(async () => {
     console.log('✅ Đã kết nối MongoDB');
     

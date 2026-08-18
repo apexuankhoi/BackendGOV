@@ -21,6 +21,7 @@ async function getCampaignReportingConfig() {
       key: 'campaign_reporting',
       openTime: '13:00',
       closeTime: '18:30',
+      editDeadline: '19:00',
       alwaysOpen: false
     });
   }
@@ -46,7 +47,13 @@ exports.submitReport = async (req, res) => {
       return res.status(403).json({ message: 'Tài khoản không thuộc cơ quan/đơn vị nào.' });
     }
 
-    // 1. Kiểm tra khung giờ từ Cấu hình Động của Hệ thống
+    // 1. Chuẩn hóa ngày hiện tại về 00:00:00
+    const dateObj = new Date();
+    dateObj.setHours(0, 0, 0, 0);
+
+    const existingReport = await CampaignReport.findOne({ agencyId, reportDate: dateObj });
+
+    // 2. Kiểm tra khung giờ từ Cấu hình Động của Hệ thống
     const config = await getCampaignReportingConfig();
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -54,18 +61,29 @@ exports.submitReport = async (req, res) => {
     if (!config.alwaysOpen) {
       const openMinutes = parseTimeToMinutes(config.openTime, 13 * 60);
       const closeMinutes = parseTimeToMinutes(config.closeTime, 18 * 60 + 30);
+      const editMinutes = parseTimeToMinutes(config.editDeadline || config.closeTime, 19 * 60);
 
-      if (currentMinutes < openMinutes || currentMinutes > closeMinutes) {
+      if (currentMinutes < openMinutes) {
         return res.status(403).json({ 
-          message: `Hệ thống chỉ mở cổng nhận và chỉnh sửa báo cáo chiến dịch từ ${config.openTime} đến ${config.closeTime} hằng ngày.`,
-          config: { openTime: config.openTime, closeTime: config.closeTime, alwaysOpen: config.alwaysOpen }
+          message: `Cổng báo cáo chưa mở. Thời gian nhận báo cáo bắt đầu từ ${config.openTime} hằng ngày.`,
+          config: { openTime: config.openTime, closeTime: config.closeTime, editDeadline: config.editDeadline, alwaysOpen: config.alwaysOpen }
+        });
+      }
+
+      if (existingReport && currentMinutes > editMinutes) {
+        return res.status(403).json({ 
+          message: `Đã quá hạn chỉnh sửa báo cáo hôm nay (Hạn chót chỉnh sửa là ${config.editDeadline || config.closeTime}).`,
+          config: { openTime: config.openTime, closeTime: config.closeTime, editDeadline: config.editDeadline, alwaysOpen: config.alwaysOpen }
+        });
+      }
+
+      if (!existingReport && currentMinutes > closeMinutes) {
+        return res.status(403).json({ 
+          message: `Cổng nộp báo cáo mới hôm nay đã đóng lúc ${config.closeTime}. Vui lòng liên hệ Tỉnh nếu cần gia hạn.`,
+          config: { openTime: config.openTime, closeTime: config.closeTime, editDeadline: config.editDeadline, alwaysOpen: config.alwaysOpen }
         });
       }
     }
-
-    // 2. Chuẩn hóa ngày hiện tại về 00:00:00
-    const dateObj = new Date();
-    dateObj.setHours(0, 0, 0, 0);
 
     const updateData = {
       agencyId,
@@ -489,14 +507,18 @@ exports.getReportingConfig = async (req, res) => {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const openMinutes = parseTimeToMinutes(config.openTime, 13 * 60);
     const closeMinutes = parseTimeToMinutes(config.closeTime, 18 * 60 + 30);
+    const editMinutes = parseTimeToMinutes(config.editDeadline || config.closeTime, 19 * 60);
     const isOpenNow = config.alwaysOpen || (currentMinutes >= openMinutes && currentMinutes <= closeMinutes);
+    const canEditNow = config.alwaysOpen || (currentMinutes >= openMinutes && currentMinutes <= editMinutes);
 
     res.json({
       openTime: config.openTime || '13:00',
       closeTime: config.closeTime || '18:30',
+      editDeadline: config.editDeadline || config.closeTime || '19:00',
       alwaysOpen: !!config.alwaysOpen,
       customNotice: config.customNotice || '',
       isOpenNow,
+      canEditNow,
       updatedAt: config.updatedAt
     });
   } catch (err) {
@@ -511,7 +533,7 @@ exports.updateReportingConfig = async (req, res) => {
       return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa cấu hình hệ thống.' });
     }
 
-    const { openTime, closeTime, alwaysOpen, customNotice } = req.body;
+    const { openTime, closeTime, editDeadline, alwaysOpen, customNotice } = req.body;
     
     // Validate format HH:mm
     const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -521,12 +543,16 @@ exports.updateReportingConfig = async (req, res) => {
     if (closeTime && !timeRegex.test(closeTime)) {
       return res.status(400).json({ message: 'Giờ đóng cổng không đúng định dạng (HH:mm, ví dụ: 18:30)' });
     }
+    if (editDeadline && !timeRegex.test(editDeadline)) {
+      return res.status(400).json({ message: 'Hạn chỉnh sửa không đúng định dạng (HH:mm, ví dụ: 19:00)' });
+    }
 
     const updated = await SystemConfig.findOneAndUpdate(
       { key: 'campaign_reporting' },
       {
         openTime: openTime || '13:00',
         closeTime: closeTime || '18:30',
+        editDeadline: editDeadline || closeTime || '19:00',
         alwaysOpen: Boolean(alwaysOpen),
         customNotice: customNotice || '',
         updatedBy: req.user.userId || req.user._id,
@@ -540,7 +566,7 @@ exports.updateReportingConfig = async (req, res) => {
       user: req.user.userId || req.user._id,
       action: 'UPDATE_CONFIG',
       target: 'Cấu hình Khung giờ Báo cáo Chiến dịch',
-      details: `Giờ mở: ${updated.openTime}, Giờ đóng/hạn sửa: ${updated.closeTime}, Luôn mở: ${updated.alwaysOpen}`
+      details: `Giờ mở: ${updated.openTime}, Giờ đóng: ${updated.closeTime}, Hạn sửa: ${updated.editDeadline}, Luôn mở: ${updated.alwaysOpen}`
     });
 
     res.json({ message: 'Cập nhật cấu hình khung giờ báo cáo thành công!', config: updated });

@@ -12,8 +12,14 @@ exports.getFiles = async (req, res) => {
       filter.uploadedBy = req.user.userId;
       filter.isPersonal = true;
     } else {
-      if (!req.user.agencyId) return res.status(403).json({ message: 'Bạn chưa thuộc cơ quan nào để xem kho chung' });
-      filter.agencyId = req.user.agencyId;
+      let currentAgencyId = req.user.agencyId;
+      if (!currentAgencyId && ['SENIOR_ADMIN', 'ADMIN', 'PROVINCE_ADMIN'].includes(req.user.role)) {
+        const Agency = require('../models/Agency');
+        const provinceAgency = await Agency.findOne({ level: 'PROVINCE', parentAgency: null }) || await Agency.findOne({ level: 'PROVINCE' });
+        if (provinceAgency) currentAgencyId = provinceAgency._id;
+      }
+      if (!currentAgencyId) return res.status(403).json({ message: 'Bạn chưa thuộc cơ quan nào để xem kho chung' });
+      filter.agencyId = currentAgencyId;
       filter.isPersonal = false;
     }
 
