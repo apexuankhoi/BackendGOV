@@ -14,6 +14,9 @@ router.put('/config', authMiddleware, campaignController.updateReportingConfig);
 router.post('/report', authMiddleware, campaignController.submitReport);
 router.get('/report', authMiddleware, campaignController.getMyReport);
 
+// Danh sách tiến độ và link minh chứng 102 Xã/Phường
+router.get('/communes-status', campaignController.getCommunesReportStatus);
+
 // Dành cho cấp Tỉnh xem
 router.get('/all-reports', authMiddleware, campaignController.getAllReports);
 

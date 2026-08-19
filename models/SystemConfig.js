@@ -12,6 +12,13 @@ const systemConfigSchema = new mongoose.Schema({
   alwaysOpen: { type: Boolean, default: false },
   // Thông báo tùy chỉnh
   customNotice: { type: String, default: '' },
+  
+  // Cấu hình thời gian Chiến dịch (Dành cho Super Admin cấu hình linh hoạt)
+  campaignStartDate: { type: String, default: '2026-08-01' },
+  campaignEndDate: { type: String, default: '2026-09-13' },
+  campaignTotalDays: { type: Number, default: 44 },
+  campaignName: { type: String, default: 'Chiến dịch 44 ngày đêm — Đánh giá tiến độ 11 chỉ tiêu Chuyển đổi số' },
+
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   updatedAt: { type: Date, default: Date.now }
 });

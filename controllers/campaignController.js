@@ -255,7 +255,8 @@ exports.getGlobalStats = async (req, res) => {
     ]);
 
     const activeAgenciesCount = await CampaignReport.distinct('agencyId').then(arr => arr.length);
-    const totalAgencies = await Agency.countDocuments({ level: 'COMMUNE' });
+    const rawTotalAgencies = await Agency.countDocuments({ level: 'COMMUNE' });
+    const totalAgencies = rawTotalAgencies >= 102 ? 102 : (rawTotalAgencies || 102);
     const s = stats[0] || {};
 
     res.json({
@@ -277,11 +278,79 @@ exports.getGlobalStats = async (req, res) => {
       safetyCampaigns: s.totalSafetyCampaigns || 0,
       mediaPosts: s.totalMediaPosts || 0,
       activeAgencies: activeAgenciesCount,
-      totalAgencies: totalAgencies > 0 ? totalAgencies : 102
+      totalAgencies: totalAgencies
     });
   } catch (error) {
     console.error('Error getGlobalStats:', error);
     res.status(500).json({ message: 'Lỗi server' });
+  }
+};
+
+// Lấy danh sách tiến độ báo cáo và link minh chứng của 102 Xã/Phường
+exports.getCommunesReportStatus = async (req, res) => {
+  try {
+    const { date } = req.query;
+    const dateObj = new Date(date || Date.now());
+    dateObj.setHours(0, 0, 0, 0);
+
+    // Lấy danh sách các xã/phường
+    const communes = await Agency.find({ level: 'COMMUNE' })
+      .select('name level province district')
+      .sort({ name: 1 })
+      .lean();
+
+    // Lấy báo cáo theo ngày
+    const reports = await CampaignReport.find({ reportDate: dateObj })
+      .populate('reporterId', 'username email')
+      .lean();
+
+    const reportMap = new Map();
+    reports.forEach(r => {
+      if (r.agencyId) reportMap.set(String(r.agencyId), r);
+    });
+
+    const result = communes.map(c => {
+      const rep = reportMap.get(String(c._id));
+      return {
+        _id: c._id,
+        agencyName: c.name,
+        district: c.district || '',
+        hasReported: !!rep,
+        reportId: rep?._id || null,
+        reportDate: dateObj,
+        reporterName: rep?.reporterId?.username || '',
+        evidenceLinks: rep?.evidenceLinks || '',
+        issues: rep?.issues || '',
+        proposals: rep?.proposals || '',
+        digitalSkills: rep?.digitalSkills || 0,
+        vneidSupport: rep?.vneidSupport || 0,
+        publicServices: rep?.publicServices || 0,
+        qrSupport: rep?.qrSupport || 0,
+        activeTeams: rep?.activeTeams || 0,
+        trainingClasses: rep?.trainingClasses || 0,
+        digitalModels: rep?.digitalModels || 0,
+        digitalProducts: rep?.digitalProducts || 0,
+        youthTrained: rep?.youthTrained || 0,
+        youthProjects: rep?.youthProjects || 0,
+        smartwebCount: rep?.smartwebCount || 0,
+        volunteers: rep?.volunteers || 0,
+        updatedAt: rep?.updatedAt || null
+      };
+    });
+
+    const reportedCount = result.filter(r => r.hasReported).length;
+    const totalCount = result.length > 0 ? result.length : 102;
+
+    res.json({
+      date: dateObj,
+      totalCount: totalCount > 102 ? 102 : totalCount,
+      reportedCount,
+      unreportedCount: Math.max(0, (totalCount > 102 ? 102 : totalCount) - reportedCount),
+      communes: result
+    });
+  } catch (error) {
+    console.error('Error getCommunesReportStatus:', error);
+    res.status(500).json({ message: 'Lỗi lấy danh sách báo cáo các xã' });
   }
 };
 
@@ -499,7 +568,7 @@ exports.getDtiSummary = async (req, res) => {
   }
 };
 
-// Lấy cấu hình khung giờ nhận/sửa báo cáo hiện tại
+// Lấy cấu hình khung giờ nhận/sửa báo cáo & thời gian chiến dịch hiện tại
 exports.getReportingConfig = async (req, res) => {
   try {
     const config = await getCampaignReportingConfig();
@@ -517,6 +586,10 @@ exports.getReportingConfig = async (req, res) => {
       editDeadline: config.editDeadline || config.closeTime || '19:00',
       alwaysOpen: !!config.alwaysOpen,
       customNotice: config.customNotice || '',
+      campaignStartDate: config.campaignStartDate || '2026-08-01',
+      campaignEndDate: config.campaignEndDate || '2026-09-13',
+      campaignTotalDays: config.campaignTotalDays || 44,
+      campaignName: config.campaignName || 'Chiến dịch 44 ngày đêm — Đánh giá tiến độ 11 chỉ tiêu Chuyển đổi số',
       isOpenNow,
       canEditNow,
       updatedAt: config.updatedAt
@@ -526,14 +599,17 @@ exports.getReportingConfig = async (req, res) => {
   }
 };
 
-// Cập nhật cấu hình khung giờ (Dành cho Super Admin & Tỉnh)
+// Cập nhật cấu hình khung giờ & thời gian chiến dịch (Dành cho Super Admin & Tỉnh)
 exports.updateReportingConfig = async (req, res) => {
   try {
     if (req.user.role !== 'SENIOR_ADMIN' && req.user.role !== 'ADMIN' && req.user.role !== 'PROVINCE_ADMIN') {
       return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa cấu hình hệ thống.' });
     }
 
-    const { openTime, closeTime, editDeadline, alwaysOpen, customNotice } = req.body;
+    const { 
+      openTime, closeTime, editDeadline, alwaysOpen, customNotice,
+      campaignStartDate, campaignEndDate, campaignTotalDays, campaignName
+    } = req.body;
     
     // Validate format HH:mm
     const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -547,17 +623,33 @@ exports.updateReportingConfig = async (req, res) => {
       return res.status(400).json({ message: 'Hạn chỉnh sửa không đúng định dạng (HH:mm, ví dụ: 19:00)' });
     }
 
+    // Tính tổng số ngày nếu có startDate và endDate
+    let totalDays = Number(campaignTotalDays);
+    if (campaignStartDate && campaignEndDate) {
+      const s = new Date(campaignStartDate);
+      const e = new Date(campaignEndDate);
+      const diffDays = Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
+      if (diffDays > 0) totalDays = diffDays;
+    }
+
+    const updatePayload = {
+      openTime: openTime || '13:00',
+      closeTime: closeTime || '18:30',
+      editDeadline: editDeadline || closeTime || '19:00',
+      alwaysOpen: Boolean(alwaysOpen),
+      customNotice: customNotice || '',
+      updatedBy: req.user.userId || req.user._id,
+      updatedAt: Date.now()
+    };
+
+    if (campaignStartDate) updatePayload.campaignStartDate = campaignStartDate;
+    if (campaignEndDate) updatePayload.campaignEndDate = campaignEndDate;
+    if (totalDays) updatePayload.campaignTotalDays = totalDays;
+    if (campaignName) updatePayload.campaignName = campaignName;
+
     const updated = await SystemConfig.findOneAndUpdate(
       { key: 'campaign_reporting' },
-      {
-        openTime: openTime || '13:00',
-        closeTime: closeTime || '18:30',
-        editDeadline: editDeadline || closeTime || '19:00',
-        alwaysOpen: Boolean(alwaysOpen),
-        customNotice: customNotice || '',
-        updatedBy: req.user.userId || req.user._id,
-        updatedAt: Date.now()
-      },
+      updatePayload,
       { upsert: true, returnDocument: 'after' }
     );
 
@@ -565,11 +657,11 @@ exports.updateReportingConfig = async (req, res) => {
     await ActivityLog.create({
       user: req.user.userId || req.user._id,
       action: 'UPDATE_CONFIG',
-      target: 'Cấu hình Khung giờ Báo cáo Chiến dịch',
-      details: `Giờ mở: ${updated.openTime}, Giờ đóng: ${updated.closeTime}, Hạn sửa: ${updated.editDeadline}, Luôn mở: ${updated.alwaysOpen}`
+      target: 'Cấu hình Khung giờ & Thời gian Chiến dịch',
+      details: `Giờ mở: ${updated.openTime}, Giờ đóng: ${updated.closeTime}, Bắt đầu: ${updated.campaignStartDate}, Kết thúc: ${updated.campaignEndDate}, Tổng: ${updated.campaignTotalDays} ngày`
     });
 
-    res.json({ message: 'Cập nhật cấu hình khung giờ báo cáo thành công!', config: updated });
+    res.json({ message: 'Cập nhật cấu hình chiến dịch thành công!', config: updated });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi cập nhật cấu hình: ' + err.message });
   }
