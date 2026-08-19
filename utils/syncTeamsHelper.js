@@ -42,6 +42,9 @@ async function syncAllTeamsFromReports() {
     // Lấy toàn bộ các báo cáo chiến dịch đã nộp
     const reportAgg = await CampaignReport.aggregate([
       {
+        $sort: { updatedAt: 1 }
+      },
+      {
         $group: {
           _id: '$agencyId',
           totalVolunteers: { $sum: '$volunteers' },
@@ -49,7 +52,10 @@ async function syncAllTeamsFromReports() {
           totalDigitalSkills: { $sum: '$digitalSkills' },
           totalVneid: { $sum: '$vneidSupport' },
           totalPublicServices: { $sum: '$publicServices' },
+          totalQr: { $sum: '$qrSupport' },
+          totalSmartweb: { $sum: '$smartwebCount' },
           lastReporterId: { $last: '$reporterId' },
+          lastEvidenceLinks: { $last: '$evidenceLinks' },
           activeTeamsCount: { $sum: '$activeTeams' }
         }
       }
@@ -65,6 +71,12 @@ async function syncAllTeamsFromReports() {
       const agency = await Agency.findById(item._id);
       if (!agency) continue;
 
+      let reporterName = '';
+      if (item.lastReporterId) {
+        const u = await User.findById(item.lastReporterId).select('username fullName');
+        if (u) reporterName = u.fullName || u.username || '';
+      }
+
       const communeName = agency.name;
       const districtName = getDistrictFromCommune(communeName);
       const teamName = `Đội hình Thanh niên số ${communeName}`;
@@ -79,6 +91,16 @@ async function syncAllTeamsFromReports() {
           name: teamName,
           schoolOrUnit: `Đoàn cơ sở ${communeName}`,
           createdBy: item.lastReporterId || defaultUserId,
+          agencyId: item._id,
+          reporterName: reporterName || `Cán bộ Đoàn ${communeName}`,
+          evidenceLinks: item.lastEvidenceLinks || '',
+          kpiSummary: {
+            digitalSkills: item.totalDigitalSkills || 0,
+            vneidSupport: item.totalVneid || 0,
+            publicServices: item.totalPublicServices || 0,
+            qrSupport: item.totalQr || 0,
+            smartwebCount: item.totalSmartweb || 0
+          },
           fieldsOfActivity: [
             'Chuyển đổi số cộng đồng',
             'Hướng dẫn VNeID & DVC trực tuyến',
@@ -92,8 +114,8 @@ async function syncAllTeamsFromReports() {
             type: communeName.includes('Phường') ? 'Đô thị' : 'Nông thôn'
           },
           timeframe: {
-            startDate: new Date('2026-07-01'),
-            endDate: new Date('2026-08-31')
+            startDate: new Date('2026-08-01'),
+            endDate: new Date('2026-09-13')
           },
           statistics: {
             volunteersCount,
@@ -101,7 +123,8 @@ async function syncAllTeamsFromReports() {
             estimatedValue,
             beneficiaries: totalBeneficiaries || 50
           },
-          status: 'APPROVED'
+          status: 'APPROVED',
+          updatedAt: Date.now()
         },
         { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
       );

@@ -171,6 +171,16 @@ exports.submitReport = async (req, res) => {
             name: teamName,
             schoolOrUnit: `Đoàn cơ sở ${communeName}`,
             createdBy: reporterId,
+            agencyId,
+            reporterName: req.user?.fullName || req.user?.username || `Cán bộ Đoàn ${communeName}`,
+            evidenceLinks: evidenceLinks || '',
+            kpiSummary: {
+              digitalSkills: Number(digitalSkills) || 0,
+              vneidSupport: Number(vneidSupport) || 0,
+              publicServices: Number(publicServices) || 0,
+              qrSupport: Number(qrSupport) || 0,
+              smartwebCount: Number(smartwebCount) || 0
+            },
             fieldsOfActivity: [
               'Chuyển đổi số cộng đồng',
               'Hướng dẫn VNeID & DVC trực tuyến',
@@ -184,8 +194,8 @@ exports.submitReport = async (req, res) => {
               type: communeName.includes('Phường') ? 'Đô thị' : 'Nông thôn'
             },
             timeframe: {
-              startDate: new Date('2026-07-01'),
-              endDate: new Date('2026-08-31')
+              startDate: new Date('2026-08-01'),
+              endDate: new Date('2026-09-13')
             },
             statistics: {
               volunteersCount: Number(volunteers) || 15,
@@ -193,7 +203,8 @@ exports.submitReport = async (req, res) => {
               estimatedValue: Math.round(((Number(publicServices) || 0) * 0.05 + (Number(digitalSkills) || 0) * 0.02) * 10) / 10 || 5,
               beneficiaries: totalBeneficiaries || 50
             },
-            status: 'APPROVED'
+            status: 'APPROVED',
+            updatedAt: Date.now()
           },
           { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
         );

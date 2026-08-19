@@ -28,6 +28,18 @@ const teamSchema = new mongoose.Schema({
     beneficiaries: { type: Number, default: 0 }    // Số người thụ hưởng
   },
   
+  // Báo cáo số liệu chỉ tiêu & Minh chứng
+  evidenceLinks: { type: String, default: '' }, // Link minh chứng Google Drive / Ảnh / Bài viết
+  reporterName: { type: String, default: '' },
+  agencyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agency' },
+  kpiSummary: {
+    digitalSkills: { type: Number, default: 0 },
+    vneidSupport: { type: Number, default: 0 },
+    publicServices: { type: Number, default: 0 },
+    qrSupport: { type: Number, default: 0 },
+    smartwebCount: { type: Number, default: 0 }
+  },
+
   // Trạng thái kiểm duyệt (Luồng phê duyệt)
   status: {
     type: String,
@@ -35,7 +47,8 @@ const teamSchema = new mongoose.Schema({
     default: 'PENDING' // Mặc định là chờ Tỉnh duyệt
   },
   
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
 module.exports = mongoose.model('Team', teamSchema);
