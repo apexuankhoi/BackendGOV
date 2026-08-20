@@ -119,9 +119,10 @@ exports.register = async (req, res) => {
     if (commune) {
       const Agency = require('../models/Agency');
       const cleanCommune = commune.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
-      const matchedAgency = await Agency.findOne({
-        name: { $regex: cleanCommune, $options: 'i' }
-      });
+      let matchedAgency = await Agency.findOne({ name: commune });
+      if (!matchedAgency) {
+        matchedAgency = await Agency.findOne({ name: { $regex: cleanCommune, $options: 'i' } });
+      }
       if (matchedAgency) {
         userAgencyId = matchedAgency._id;
       }
@@ -147,14 +148,30 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
     const cleanEmail = (email || '').trim();
-    const user = await User.findOne({ 
+    let user = await User.findOne({ 
       email: { $regex: new RegExp(`^${cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } 
     }).populate('agencyId', 'name level');
     if (!user) return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
     
-    const payload = { userId: user._id, role: user.role, agencyId: user.agencyId ? user.agencyId._id : null };
+    // Tự động tìm & gán Agency nếu tài khoản chưa được liên kết
+    if (!user.agencyId && user.locationContext?.commune) {
+      const Agency = require('../models/Agency');
+      const comm = user.locationContext.commune;
+      const cleanCommune = comm.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
+      let matchedAgency = await Agency.findOne({ name: comm });
+      if (!matchedAgency) {
+        matchedAgency = await Agency.findOne({ name: { $regex: cleanCommune, $options: 'i' } });
+      }
+      if (matchedAgency) {
+        user.agencyId = matchedAgency._id;
+        await user.save();
+        user = await User.findById(user._id).populate('agencyId', 'name level');
+      }
+    }
+
+    const payload = { userId: user._id, role: user.role, agencyId: user.agencyId ? (user.agencyId._id || user.agencyId) : null };
     const token = jwt.sign(payload, SECRET, { expiresIn: '7d' });
     const refreshToken = jwt.sign(payload, SECRET, { expiresIn: '7d' }); // Refresh sống 7 ngày
     res.json({ token, refreshToken, role: user.role, username: user.username, agency: user.agencyId });

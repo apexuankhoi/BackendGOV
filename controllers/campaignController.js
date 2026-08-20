@@ -43,33 +43,46 @@ exports.submitReport = async (req, res) => {
     } = req.body;
 
     let agencyId = req.user.agencyId;
-    if (!agencyId) {
-      const User = require('../models/User');
-      const currentUser = await User.findById(req.user.userId || req.user._id);
-      if (currentUser?.agencyId) {
-        agencyId = currentUser.agencyId;
-      } else if (currentUser?.locationContext?.commune) {
-        const comm = currentUser.locationContext.commune;
-        const matchedAgency = await Agency.findOne({
-          name: { $regex: comm.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, ''), $options: 'i' }
-        });
-        if (matchedAgency) {
-          agencyId = matchedAgency._id;
-          currentUser.agencyId = agencyId;
-          await currentUser.save();
-        }
-      }
+    const User = require('../models/User');
+    const currentUser = await User.findById(req.user.userId || req.user._id);
+
+    if (!agencyId && currentUser?.agencyId) {
+      agencyId = currentUser.agencyId;
     }
 
     if (!agencyId && req.body.agencyId) {
-      agencyId = req.body.agencyId;
+      const candidate = await Agency.findById(req.body.agencyId);
+      if (candidate) agencyId = candidate._id;
     }
 
-    if (!agencyId) {
+    // Tự động tìm Agency theo địa chỉ xã/phường của tài khoản
+    if (!agencyId && currentUser?.locationContext?.commune) {
+      const comm = currentUser.locationContext.commune;
+      const clean = comm.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
+      let matchedAgency = await Agency.findOne({ name: comm });
+      if (!matchedAgency) {
+        matchedAgency = await Agency.findOne({ name: { $regex: clean, $options: 'i' } });
+      }
+      if (matchedAgency) {
+        agencyId = matchedAgency._id;
+        currentUser.agencyId = agencyId;
+        await currentUser.save();
+      }
+    }
+
+    // Xác thực chắc chắn AgencyId tồn tại trong DB
+    let validAgency = null;
+    if (agencyId) {
+      validAgency = await Agency.findById(agencyId);
+    }
+
+    if (!validAgency) {
       return res.status(403).json({ 
-        message: 'Tài khoản chưa được liên kết với Xã/Phường nào. Vui lòng cập nhật đơn vị công tác hoặc liên hệ Tỉnh Đoàn.' 
+        message: '⚠️ Tài khoản chưa được liên kết với Đơn vị Xã/Phường hợp lệ. Vui lòng cập nhật đơn vị công tác hoặc liên hệ Quản trị viên Tỉnh.' 
       });
     }
+
+    agencyId = validAgency._id;
 
     // 1. Kiểm tra BẮT BUỘC có Link minh chứng
     let cleanEvidenceLinks = (evidenceLinks || '').trim();
@@ -473,10 +486,30 @@ exports.getAllReports = async (req, res) => {
     const dateObj = new Date(date || Date.now());
     dateObj.setHours(0, 0, 0, 0);
 
-    const reports = await CampaignReport.find({ reportDate: dateObj })
+    let reports = await CampaignReport.find({ reportDate: dateObj })
       .populate('agencyId', 'name level district')
       .populate('reporterId', 'username email role locationContext')
       .sort({ updatedAt: -1 });
+
+    // Tự động khôi phục & gán đơn vị (Auto-repair) nếu phát hiện bất kỳ báo cáo nào bị khuyết agencyId
+    for (let r of reports) {
+      if (!r.agencyId) {
+        const commCandidate = r.reporterId?.locationContext?.commune || (r.reporterName ? r.reporterName.replace(/^Cán bộ Đoàn\s*/i, '') : '');
+        if (commCandidate) {
+          const clean = commCandidate.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
+          const found = await Agency.findOne({
+            $or: [
+              { name: commCandidate },
+              { name: { $regex: clean, $options: 'i' } }
+            ]
+          });
+          if (found) {
+            await CampaignReport.updateOne({ _id: r._id }, { $set: { agencyId: found._id } });
+            r.agencyId = found;
+          }
+        }
+      }
+    }
 
     res.json(reports);
   } catch (error) {
