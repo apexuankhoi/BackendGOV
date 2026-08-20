@@ -506,6 +506,84 @@ exports.deleteReport = async (req, res) => {
   }
 };
 
+// Gán / Cập nhật Đơn vị (Agency) cho báo cáo - Dành cho Super Admin / Admin
+exports.assignAgencyToReport = async (req, res) => {
+  try {
+    const role = req.user?.role;
+    if (!['SENIOR_ADMIN', 'ADMIN', 'PROVINCE_ADMIN'].includes(role)) {
+      return res.status(403).json({ message: 'Chỉ Super Admin / Quản trị viên mới có quyền gán đơn vị cho báo cáo.' });
+    }
+
+    const { id } = req.params;
+    const { agencyId } = req.body;
+
+    if (!agencyId) {
+      return res.status(400).json({ message: 'Vui lòng chọn đơn vị cần gán.' });
+    }
+
+    const agency = await Agency.findById(agencyId);
+    if (!agency) {
+      return res.status(404).json({ message: 'Không tìm thấy đơn vị được chọn.' });
+    }
+
+    const report = await CampaignReport.findById(id);
+    if (!report) {
+      return res.status(404).json({ message: 'Không tìm thấy báo cáo cần cập nhật.' });
+    }
+
+    // Cập nhật AgencyId và snapshot reporterName nếu cần
+    report.agencyId = agency._id;
+    if (!report.reporterName || report.reporterName.startsWith('Cán bộ Đoàn') || report.reporterName === 'Không xác định') {
+      report.reporterName = `Cán bộ Đoàn ${agency.name}`;
+    }
+    report.updatedAt = Date.now();
+    await report.save();
+
+    // Tự động đồng bộ Đội hình Team tương ứng của xã
+    try {
+      const communeName = agency.name;
+      const teamName = `Đội hình Thanh niên số ${communeName}`;
+      await Team.findOneAndUpdate(
+        { 'location.commune': communeName },
+        {
+          name: teamName,
+          schoolOrUnit: `Đoàn cơ sở ${communeName}`,
+          agencyId: agency._id,
+          reporterName: report.reporterName,
+          evidenceLinks: report.evidenceLinks || '',
+          kpiSummary: {
+            digitalSkills: report.digitalSkills || 0,
+            vneidSupport: report.vneidSupport || 0,
+            publicServices: report.publicServices || 0,
+            qrSupport: report.qrSupport || 0,
+            smartwebCount: report.smartwebCount || 0
+          },
+          location: {
+            province: 'Đắk Lắk',
+            district: agency.district || 'Đắk Lắk',
+            commune: communeName
+          }
+        },
+        { upsert: true, setDefaultsOnInsert: true }
+      );
+    } catch (teamErr) {
+      console.error('Lỗi sync Team khi gán agency:', teamErr);
+    }
+
+    const updatedReport = await CampaignReport.findById(id)
+      .populate('agencyId', 'name level district')
+      .populate('reporterId', 'username email role locationContext');
+
+    res.json({ 
+      message: `✅ Đã gán đơn vị "${agency.name}" cho báo cáo thành công!`, 
+      report: updatedReport 
+    });
+  } catch (error) {
+    console.error('Error assignAgencyToReport:', error);
+    res.status(500).json({ message: 'Lỗi server khi gán đơn vị cho báo cáo' });
+  }
+};
+
 // Xuất Excel báo cáo chiến dịch (Tỉnh) - Đầy đủ 11 chỉ tiêu
 exports.exportExcel = async (req, res) => {
   try {

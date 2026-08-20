@@ -20,6 +20,7 @@ router.get('/communes-status', campaignController.getCommunesReportStatus);
 // Dành cho cấp Tỉnh xem và quản lý
 router.get('/all-reports', authMiddleware, campaignController.getAllReports);
 router.delete('/report/:id', authMiddleware, campaignController.deleteReport);
+router.put('/report/:id/agency', authMiddleware, campaignController.assignAgencyToReport);
 
 // Xuất Excel báo cáo chiến dịch
 router.get('/export-excel', authMiddleware, campaignController.exportExcel);
