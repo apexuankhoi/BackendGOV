@@ -42,9 +42,33 @@ exports.submitReport = async (req, res) => {
       issues, proposals, evidenceLinks 
     } = req.body;
 
-    const agencyId = req.user.agencyId;
+    let agencyId = req.user.agencyId;
     if (!agencyId) {
-      return res.status(403).json({ message: 'Tài khoản không thuộc cơ quan/đơn vị nào.' });
+      const User = require('../models/User');
+      const currentUser = await User.findById(req.user.userId || req.user._id);
+      if (currentUser?.agencyId) {
+        agencyId = currentUser.agencyId;
+      } else if (currentUser?.locationContext?.commune) {
+        const comm = currentUser.locationContext.commune;
+        const matchedAgency = await Agency.findOne({
+          name: { $regex: comm.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, ''), $options: 'i' }
+        });
+        if (matchedAgency) {
+          agencyId = matchedAgency._id;
+          currentUser.agencyId = agencyId;
+          await currentUser.save();
+        }
+      }
+    }
+
+    if (!agencyId && req.body.agencyId) {
+      agencyId = req.body.agencyId;
+    }
+
+    if (!agencyId) {
+      return res.status(403).json({ 
+        message: 'Tài khoản chưa được liên kết với Xã/Phường nào. Vui lòng cập nhật đơn vị công tác hoặc liên hệ Tỉnh Đoàn.' 
+      });
     }
 
     // 1. Kiểm tra BẮT BUỘC có Link minh chứng
@@ -449,14 +473,35 @@ exports.getAllReports = async (req, res) => {
     dateObj.setHours(0, 0, 0, 0);
 
     const reports = await CampaignReport.find({ reportDate: dateObj })
-      .populate('agencyId', 'name')
-      .populate('reporterId', 'username')
+      .populate('agencyId', 'name level district')
+      .populate('reporterId', 'username email role locationContext')
       .sort({ updatedAt: -1 });
 
     res.json(reports);
   } catch (error) {
     console.error('Error getAllReports:', error);
     res.status(500).json({ message: 'Lỗi server' });
+  }
+};
+
+// Xóa báo cáo sai / báo cáo rác (Dành cho Super Admin / Admin)
+exports.deleteReport = async (req, res) => {
+  try {
+    const role = req.user?.role;
+    if (!['SENIOR_ADMIN', 'ADMIN', 'PROVINCE_ADMIN'].includes(role)) {
+      return res.status(403).json({ message: 'Bạn không có quyền xóa báo cáo.' });
+    }
+
+    const { id } = req.params;
+    const report = await CampaignReport.findByIdAndDelete(id);
+    if (!report) {
+      return res.status(404).json({ message: 'Không tìm thấy báo cáo cần xóa.' });
+    }
+
+    res.json({ message: '✅ Đã xóa báo cáo thành công!' });
+  } catch (error) {
+    console.error('Error deleteReport:', error);
+    res.status(500).json({ message: 'Lỗi server khi xóa báo cáo' });
   }
 };
 

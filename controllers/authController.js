@@ -115,11 +115,24 @@ exports.register = async (req, res) => {
 
     otpStore.delete(email);
 
+    let userAgencyId = null;
+    if (commune) {
+      const Agency = require('../models/Agency');
+      const cleanCommune = commune.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
+      const matchedAgency = await Agency.findOne({
+        name: { $regex: cleanCommune, $options: 'i' }
+      });
+      if (matchedAgency) {
+        userAgencyId = matchedAgency._id;
+      }
+    }
+
     const hashed = await bcrypt.hash(password, 10);
     await User.create({ 
       username, 
       email, 
       password: hashed, 
+      agencyId: userAgencyId,
       role: role || 'CITIZEN', 
       locationContext: { province, district, commune },
       cccd, dob, address, phone
