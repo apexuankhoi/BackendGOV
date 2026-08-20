@@ -147,6 +147,7 @@ exports.submitReport = async (req, res) => {
       issues: issues || '',
       proposals: proposals || '',
       evidenceLinks: cleanEvidenceLinks,
+      reporterName: req.user?.fullName || req.user?.username || '',
       updatedAt: Date.now()
     };
 

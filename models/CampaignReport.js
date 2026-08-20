@@ -27,6 +27,7 @@ const campaignReportSchema = new mongoose.Schema({
   issues: { type: String }, // Khó khăn vướng mắc
   proposals: { type: String }, // Đề xuất
   evidenceLinks: { type: String, required: [true, 'Link minh chứng là bắt buộc'] }, // Link minh chứng (BẮT BUỘC)
+  reporterName: { type: String, default: '' }, // Snapshot tên người nộp — không bị mất dù xoá account
 
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
