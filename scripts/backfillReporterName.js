@@ -2,10 +2,13 @@
  * MIGRATION SCRIPT: Backfill reporterName cho báo cáo cũ
  * Chạy 1 lần: node scripts/backfillReporterName.js
  * 
- * Logic:
- *   1. Tìm tất cả báo cáo có reporterName rỗng/null
- *   2. Thử populate reporterId → lấy username
- *   3. Nếu user đã bị xoá → dùng "Cán bộ Đoàn [tên xã]"
+ * Chuỗi fallback:
+ *   1. reporterId.username   (user còn tồn tại)
+ *   2. reporterId.email      (user còn tồn tại)
+ *   3. agencyId.name         (populate thành công)
+ *   4. Agency.findById(rawId) (populate thất bại — thử lại thẳng)
+ *   5. User.findById(rawId)  (populate thất bại — thử lại thẳng)
+ *   6. "Cán bộ Đoàn (ngày DD/MM/YYYY)"
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
@@ -13,7 +16,6 @@ const mongoose = require('mongoose');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/webgov_daklak';
 
-// ── Models ──────────────────────────────────────────────────────────────────
 const CampaignReport = require('../models/CampaignReport');
 const User           = require('../models/User');
 const Agency         = require('../models/Agency');
@@ -22,44 +24,56 @@ async function run() {
   await mongoose.connect(MONGODB_URI);
   console.log('✅ Đã kết nối MongoDB:', MONGODB_URI);
 
-  // Lấy tất cả báo cáo chưa có reporterName
-  const reports = await CampaignReport.find({
+  // Lấy raw documents (không populate) để giữ ObjectId gốc
+  const rawReports = await CampaignReport.find({
     $or: [
       { reporterName: { $exists: false } },
       { reporterName: '' },
       { reporterName: null },
     ]
-  })
-    .populate('reporterId', 'username email fullName')
-    .populate('agencyId', 'name');
+  }).lean(); // .lean() trả về plain JS object, giữ nguyên ObjectId
 
-  console.log(`📋 Tìm thấy ${reports.length} báo cáo cần backfill...`);
+  console.log(`📋 Tìm thấy ${rawReports.length} báo cáo cần backfill...\n`);
 
-  let updated   = 0;
-  let fromUser  = 0;
+  let updated    = 0;
+  let fromUser   = 0;
   let fromAgency = 0;
-  let unknown   = 0;
+  let fromDate   = 0;
 
-  for (const r of reports) {
+  for (const r of rawReports) {
     let name = '';
+    let source = '';
 
-    // Ưu tiên 1: từ User đang còn tồn tại
-    if (r.reporterId?.username) {
-      name = r.reporterId.username;
-      fromUser++;
-    } else if (r.reporterId?.email) {
-      name = r.reporterId.email;
-      fromUser++;
+    // ── Bước 1: Thử populate reporterId ──────────────────────────────────
+    if (r.reporterId) {
+      const user = await User.findById(r.reporterId).select('username email fullName').lean();
+      if (user?.username) {
+        name   = user.username;
+        source = 'User.username';
+        fromUser++;
+      } else if (user?.email) {
+        name   = user.email;
+        source = 'User.email';
+        fromUser++;
+      }
     }
-    // Ưu tiên 2: từ tên đơn vị (agency)
-    else if (r.agencyId?.name) {
-      name = `Cán bộ Đoàn ${r.agencyId.name}`;
-      fromAgency++;
+
+    // ── Bước 2: Thử lấy tên từ agencyId ─────────────────────────────────
+    if (!name && r.agencyId) {
+      const agency = await Agency.findById(r.agencyId).select('name').lean();
+      if (agency?.name) {
+        name   = `Cán bộ Đoàn ${agency.name}`;
+        source = 'Agency.name';
+        fromAgency++;
+      }
     }
-    // Cuối cùng
-    else {
-      name = 'Không xác định';
-      unknown++;
+
+    // ── Bước 3: Fallback cuối — ghi ngày báo cáo ─────────────────────────
+    if (!name) {
+      const d = r.reportDate ? new Date(r.reportDate).toLocaleDateString('vi-VN') : '?';
+      name   = `Cán bộ Đoàn (ngày ${d})`;
+      source = 'date-fallback';
+      fromDate++;
     }
 
     await CampaignReport.updateOne(
@@ -67,18 +81,15 @@ async function run() {
       { $set: { reporterName: name } }
     );
     updated++;
-
-    if (updated % 20 === 0) {
-      console.log(`   ✏️  Đã xử lý ${updated}/${reports.length}...`);
-    }
+    console.log(`   [${updated}/${rawReports.length}] ${source.padEnd(14)} → "${name}"`);
   }
 
   console.log('\n═══════════════════════════════════════');
   console.log(`✅ Backfill hoàn tất!`);
   console.log(`   📊 Tổng cập nhật : ${updated} báo cáo`);
   console.log(`   👤 Từ User DB     : ${fromUser}`);
-  console.log(`   🏢 Từ tên Agency  : ${fromAgency}`);
-  console.log(`   ❓ Không xác định : ${unknown}`);
+  console.log(`   🏢 Từ Agency DB   : ${fromAgency}`);
+  console.log(`   📅 Từ ngày BC     : ${fromDate}  (user + agency đều đã bị xóa)`);
   console.log('═══════════════════════════════════════\n');
 
   await mongoose.disconnect();
