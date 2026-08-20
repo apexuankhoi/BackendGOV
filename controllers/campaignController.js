@@ -47,13 +47,26 @@ exports.submitReport = async (req, res) => {
       return res.status(403).json({ message: 'Tài khoản không thuộc cơ quan/đơn vị nào.' });
     }
 
-    // 1. Chuẩn hóa ngày hiện tại về 00:00:00
+    // 1. Kiểm tra BẮT BUỘC có Link minh chứng
+    let cleanEvidenceLinks = (evidenceLinks || '').trim();
+    if (!cleanEvidenceLinks) {
+      return res.status(400).json({ 
+        message: '⚠️ BẮT BUỘC: Bạn phải đính kèm Link minh chứng (Link Google Drive, hình ảnh, tài liệu ra quân) khi nộp báo cáo.' 
+      });
+    }
+
+    // Tự động chuẩn hóa link
+    if (!/^https?:\/\//i.test(cleanEvidenceLinks)) {
+      cleanEvidenceLinks = 'https://' + cleanEvidenceLinks;
+    }
+
+    // 2. Chuẩn hóa ngày hiện tại về 00:00:00
     const dateObj = new Date();
     dateObj.setHours(0, 0, 0, 0);
 
     const existingReport = await CampaignReport.findOne({ agencyId, reportDate: dateObj });
 
-    // 2. Kiểm tra khung giờ từ Cấu hình Động của Hệ thống
+    // 3. Kiểm tra khung giờ từ Cấu hình Động của Hệ thống
     const config = await getCampaignReportingConfig();
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -109,7 +122,7 @@ exports.submitReport = async (req, res) => {
       websitesCreated: Number(websitesCreated) || 0,
       issues: issues || '',
       proposals: proposals || '',
-      evidenceLinks: evidenceLinks || '',
+      evidenceLinks: cleanEvidenceLinks,
       updatedAt: Date.now()
     };
 
@@ -238,58 +251,121 @@ exports.getMyReport = async (req, res) => {
   }
 };
 
-// Thống kê lũy kế toàn tỉnh (đầy đủ 11 chỉ tiêu)
+// Thống kê toàn tỉnh: Cả Lũy kế và Số liệu trong ngày
 exports.getGlobalStats = async (req, res) => {
   try {
-    const stats = await CampaignReport.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalDigitalSkills: { $sum: '$digitalSkills' },     // 1. Kỹ năng số
-          totalVneid: { $sum: '$vneidSupport' },              // 2. VNeID
-          totalPublicServices: { $sum: '$publicServices' },   // 3. DVC trực tuyến
-          totalQr: { $sum: '$qrSupport' },                    // 4. QR thanh toán
-          totalActiveTeams: { $sum: '$activeTeams' },         // 5. Đội hình TN số
-          totalTrainingClasses: { $sum: '$trainingClasses' }, // 6. Lớp tập huấn
-          totalDigitalModels: { $sum: '$digitalModels' },     // 7. Mô hình điểm CĐS
-          totalDigitalProducts: { $sum: '$digitalProducts' }, // 8. Sản phẩm OCOP/địa phương
-          totalYouthTrained: { $sum: '$youthTrained' },       // 9. TN tập huấn AI
-          totalYouthProjects: { $sum: '$youthProjects' },     // 10. Công trình TN CĐS
-          totalSmartWeb: { $sum: '$smartwebCount' },          // 11. Website SmartWeb
-          // Phụ trợ
-          totalWebsitesCreated: { $sum: '$websitesCreated' },
-          totalVolunteers: { $sum: '$volunteers' },
-          totalSafetyCampaigns: { $sum: '$safetyCampaigns' },
-          totalMediaPosts: { $sum: '$mediaPosts' }
+    const { date } = req.query;
+    let selectedDate = new Date();
+    if (date) {
+      selectedDate = new Date(date);
+    }
+    selectedDate.setHours(0, 0, 0, 0);
+
+    const [cumStatsAgg, dailyStatsAgg, activeAgenciesCount, rawTotalAgencies] = await Promise.all([
+      CampaignReport.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalDigitalSkills: { $sum: '$digitalSkills' },     // 1. Kỹ năng số
+            totalVneid: { $sum: '$vneidSupport' },              // 2. VNeID
+            totalPublicServices: { $sum: '$publicServices' },   // 3. DVC trực tuyến
+            totalQr: { $sum: '$qrSupport' },                    // 4. QR thanh toán
+            totalActiveTeams: { $sum: '$activeTeams' },         // 5. Đội hình TN số
+            totalTrainingClasses: { $sum: '$trainingClasses' }, // 6. Lớp tập huấn
+            totalDigitalModels: { $sum: '$digitalModels' },     // 7. Mô hình điểm CĐS
+            totalDigitalProducts: { $sum: '$digitalProducts' }, // 8. Sản phẩm OCOP/địa phương
+            totalYouthTrained: { $sum: '$youthTrained' },       // 9. TN tập huấn AI
+            totalYouthProjects: { $sum: '$youthProjects' },     // 10. Công trình TN CĐS
+            totalSmartWeb: { $sum: '$smartwebCount' },          // 11. Website SmartWeb
+            // Phụ trợ
+            totalWebsitesCreated: { $sum: '$websitesCreated' },
+            totalVolunteers: { $sum: '$volunteers' },
+            totalSafetyCampaigns: { $sum: '$safetyCampaigns' },
+            totalMediaPosts: { $sum: '$mediaPosts' }
+          }
         }
-      }
+      ]),
+      CampaignReport.aggregate([
+        {
+          $match: { reportDate: selectedDate }
+        },
+        {
+          $group: {
+            _id: null,
+            totalDigitalSkills: { $sum: '$digitalSkills' },
+            totalVneid: { $sum: '$vneidSupport' },
+            totalPublicServices: { $sum: '$publicServices' },
+            totalQr: { $sum: '$qrSupport' },
+            totalActiveTeams: { $sum: '$activeTeams' },
+            totalTrainingClasses: { $sum: '$trainingClasses' },
+            totalDigitalModels: { $sum: '$digitalModels' },
+            totalDigitalProducts: { $sum: '$digitalProducts' },
+            totalYouthTrained: { $sum: '$youthTrained' },
+            totalYouthProjects: { $sum: '$youthProjects' },
+            totalSmartWeb: { $sum: '$smartwebCount' },
+            totalWebsitesCreated: { $sum: '$websitesCreated' },
+            totalVolunteers: { $sum: '$volunteers' },
+            totalSafetyCampaigns: { $sum: '$safetyCampaigns' },
+            totalMediaPosts: { $sum: '$mediaPosts' },
+            agencies: { $addToSet: '$agencyId' }
+          }
+        }
+      ]),
+      CampaignReport.distinct('agencyId').then(arr => arr.length),
+      Agency.countDocuments({ level: 'COMMUNE' })
     ]);
 
-    const activeAgenciesCount = await CampaignReport.distinct('agencyId').then(arr => arr.length);
-    const rawTotalAgencies = await Agency.countDocuments({ level: 'COMMUNE' });
     const totalAgencies = rawTotalAgencies >= 102 ? 102 : (rawTotalAgencies || 102);
-    const s = stats[0] || {};
+    const c = cumStatsAgg[0] || {};
+    const d = dailyStatsAgg[0] || {};
+    const dailyReportedCount = d.agencies ? d.agencies.length : 0;
 
-    res.json({
-      // 11 chỉ tiêu chính thức
-      digitalSkills: s.totalDigitalSkills || 0,
-      vneid: s.totalVneid || 0,
-      publicServices: s.totalPublicServices || 0,
-      qr: s.totalQr || 0,
-      activeTeams: s.totalActiveTeams || 0,
-      trainingClasses: s.totalTrainingClasses || 0,
-      digitalModels: s.totalDigitalModels || 0,
-      digitalProducts: s.totalDigitalProducts || 0,
-      youthTrained: s.totalYouthTrained || 0,
-      youthProjects: s.totalYouthProjects || 0,
-      smartwebCount: s.totalSmartWeb || 0,
-      // Phụ trợ
-      websitesCreated: s.totalWebsitesCreated || 0,
-      volunteers: s.totalVolunteers || 0,
-      safetyCampaigns: s.totalSafetyCampaigns || 0,
-      mediaPosts: s.totalMediaPosts || 0,
+    const cumulative = {
+      digitalSkills: c.totalDigitalSkills || 0,
+      vneid: c.totalVneid || 0,
+      publicServices: c.totalPublicServices || 0,
+      qr: c.totalQr || 0,
+      activeTeams: c.totalActiveTeams || 0,
+      trainingClasses: c.totalTrainingClasses || 0,
+      digitalModels: c.totalDigitalModels || 0,
+      digitalProducts: c.totalDigitalProducts || 0,
+      youthTrained: c.totalYouthTrained || 0,
+      youthProjects: c.totalYouthProjects || 0,
+      smartwebCount: c.totalSmartWeb || 0,
+      websitesCreated: c.totalWebsitesCreated || 0,
+      volunteers: c.totalVolunteers || 0,
+      safetyCampaigns: c.totalSafetyCampaigns || 0,
+      mediaPosts: c.totalMediaPosts || 0,
       activeAgencies: activeAgenciesCount,
       totalAgencies: totalAgencies
+    };
+
+    const daily = {
+      date: selectedDate,
+      digitalSkills: d.totalDigitalSkills || 0,
+      vneid: d.totalVneid || 0,
+      publicServices: d.totalPublicServices || 0,
+      qr: d.totalQr || 0,
+      activeTeams: d.totalActiveTeams || 0,
+      trainingClasses: d.totalTrainingClasses || 0,
+      digitalModels: d.totalDigitalModels || 0,
+      digitalProducts: d.totalDigitalProducts || 0,
+      youthTrained: d.totalYouthTrained || 0,
+      youthProjects: d.totalYouthProjects || 0,
+      smartwebCount: d.totalSmartWeb || 0,
+      websitesCreated: d.totalWebsitesCreated || 0,
+      volunteers: d.totalVolunteers || 0,
+      safetyCampaigns: d.totalSafetyCampaigns || 0,
+      mediaPosts: d.totalMediaPosts || 0,
+      reportedCount: dailyReportedCount,
+      unreportedCount: Math.max(0, totalAgencies - dailyReportedCount)
+    };
+
+    res.json({
+      // Flat fields for backwards compatibility
+      ...cumulative,
+      cumulative,
+      daily
     });
   } catch (error) {
     console.error('Error getGlobalStats:', error);
