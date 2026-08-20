@@ -73,17 +73,49 @@ const io = new Server(server, {
 // Gắn io vào app để dùng ở mọi Controller (req.app.get('io'))
 app.set('io', io);
 
-// Theo dõi người dùng Online
-let onlineUsers = 0;
+// Theo dõi người dùng Online (Super Admin Monitor)
+const onlineSessionsMap = new Map(); // socketId → { userId, username, role, currentPage, loginTime, ip }
+
 io.on('connection', (socket) => {
-  onlineUsers++;
-  io.emit('onlineUsers', onlineUsers); // Broadcast số lượng online
+  const clientIp = socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim()
+    || socket.handshake.address || 'Unknown';
+
+  // Client gửi thông tin user khi kết nối
+  socket.on('userLogin', (data) => {
+    onlineSessionsMap.set(socket.id, {
+      socketId: socket.id,
+      userId:   data.userId   || 'unknown',
+      username: data.username || 'Ẩn danh',
+      role:     data.role     || 'UNKNOWN',
+      currentPage: data.currentPage || '/',
+      loginTime:   new Date().toISOString(),
+      ip: clientIp,
+    });
+    broadcastOnlineList();
+  });
+
+  // Client gửi khi chuyển trang
+  socket.on('pageChange', (data) => {
+    const session = onlineSessionsMap.get(socket.id);
+    if (session) {
+      session.currentPage = data.page || '/';
+      session.lastActive  = new Date().toISOString();
+      onlineSessionsMap.set(socket.id, session);
+      broadcastOnlineList();
+    }
+  });
 
   socket.on('disconnect', () => {
-    onlineUsers--;
-    io.emit('onlineUsers', onlineUsers);
+    onlineSessionsMap.delete(socket.id);
+    broadcastOnlineList();
   });
 });
+
+function broadcastOnlineList() {
+  const list = Array.from(onlineSessionsMap.values());
+  io.emit('onlineUsers', list.length);          // backward compat
+  io.emit('onlineUsersList', list);              // rich list for Super Admin
+}
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/webgov_daklak')
   .then(async () => {
