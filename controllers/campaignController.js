@@ -70,6 +70,24 @@ exports.submitReport = async (req, res) => {
       }
     }
 
+    // Fallback cuối: dùng commune gửi từ Frontend nếu vẫn chưa tìm được
+    if (!agencyId && req.body.commune) {
+      const bodyComm = req.body.commune;
+      const bodyClean = bodyComm.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
+      let matchedAgency = await Agency.findOne({ name: bodyComm });
+      if (!matchedAgency) {
+        matchedAgency = await Agency.findOne({ name: { $regex: bodyClean, $options: 'i' } });
+      }
+      if (matchedAgency) {
+        agencyId = matchedAgency._id;
+        // Cập nhật luôn vào User profile
+        if (currentUser && !currentUser.agencyId) {
+          currentUser.agencyId = agencyId;
+          await currentUser.save();
+        }
+      }
+    }
+
     // Xác thực chắc chắn AgencyId tồn tại trong DB
     let validAgency = null;
     if (agencyId) {
