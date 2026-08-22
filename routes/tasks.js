@@ -10,7 +10,14 @@ const checkStaff = (req, res, next) => {
 };
 
 const checkAdmin = (req, res, next) => {
-  if (req.user.role !== 'ADMIN' && req.user.role !== 'SENIOR_ADMIN') {
+  if (!['ADMIN', 'SENIOR_ADMIN', 'PROVINCE_ADMIN'].includes(req.user.role)) {
+    return res.status(403).json({ message: 'Không có quyền' });
+  }
+  next();
+};
+
+const checkSenior = (req, res, next) => {
+  if (!['SENIOR_ADMIN', 'PROVINCE_ADMIN'].includes(req.user.role)) {
     return res.status(403).json({ message: 'Không có quyền' });
   }
   next();
@@ -18,12 +25,26 @@ const checkAdmin = (req, res, next) => {
 
 const aiDocController = require('../controllers/aiDocController');
 
+// ===== TASK ROUTES =====
 router.get('/', authMiddleware, checkStaff, taskController.getTasks);
 router.get('/overdue', authMiddleware, checkStaff, taskController.getOverdueTasks);
 router.get('/stats', authMiddleware, checkStaff, taskController.getTaskStats);
+router.get('/dashboard', authMiddleware, checkAdmin, taskController.getTaskDashboard);  // Bí thư xem tổng quan
+
 router.post('/', authMiddleware, checkStaff, taskController.createTask);
 router.put('/:id', authMiddleware, checkStaff, taskController.updateTask);
 router.delete('/:id', authMiddleware, checkAdmin, taskController.deleteTask);
+
+// Ủy quyền / Giao lại
+router.post('/:id/delegate', authMiddleware, checkStaff, taskController.delegateTask);
+
+// Bình luận & Cập nhật tiến độ
+router.post('/:id/comment', authMiddleware, checkStaff, taskController.addComment);
+
+// Duyệt hoàn thành (chỉ người giao hoặc cấp trên)
+router.post('/:id/approve', authMiddleware, checkStaff, taskController.approveTask);
+
+// AI Solve
 router.post('/:id/ai-solve', authMiddleware, checkStaff, aiDocController.aiSolveTask);
 
 // === AI Chat ===
@@ -33,3 +54,4 @@ router.post('/:id/chat', authMiddleware, checkStaff, aiChatController.sendChatMe
 router.delete('/:id/chat', authMiddleware, checkStaff, aiChatController.clearChatHistory);
 
 module.exports = router;
+

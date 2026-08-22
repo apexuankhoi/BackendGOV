@@ -170,6 +170,47 @@ async function seed() {
       cccd: '066099000001'
     });
 
+    // ── LDNHĐ: Bí thư & Phó Bí thư Tỉnh Đoàn Đắk Lắk ────────────────────────
+    const pwLanhDao = await bcrypt.hash('BithuDaklak@2026', 10);
+    const pwPbt    = await bcrypt.hash('PhobithuDaklak@2026', 10);
+
+    const biThu = await User.create({
+      username: 'Lương Minh Tùng',
+      email: 'luongminhtung.bithu@tinhdbdl.gov.vn',
+      password: pwLanhDao,
+      role: 'SENIOR_ADMIN',
+      position: 'BI_THU',
+      positionLabel: 'Bí thư Tỉnh Đoàn',
+      agencyId: provinceAgency._id,
+      locationContext: { province: 'Đắk Lắk' },
+      phone: '0900000001'
+    });
+
+    const phoBiThu1 = await User.create({
+      username: 'Nguyễn Thao Giang',
+      email: 'nguyenthaogiang.pbt@tinhdbdl.gov.vn',
+      password: pwPbt,
+      role: 'PROVINCE_ADMIN',
+      position: 'PHO_BI_THU',
+      positionLabel: 'Phó Bí thư Tỉnh Đoàn',
+      agencyId: provinceAgency._id,
+      locationContext: { province: 'Đắk Lắk' },
+      phone: '0900000002'
+    });
+
+    const phoBiThu2 = await User.create({
+      username: 'Y Lê Pas Tơr',
+      email: 'ylepasstor.pbt@tinhdbdl.gov.vn',
+      password: pwPbt,
+      role: 'PROVINCE_ADMIN',
+      position: 'PHO_BI_THU',
+      positionLabel: 'Phó Bí thư Tỉnh Đoàn',
+      agencyId: provinceAgency._id,
+      locationContext: { province: 'Đắk Lắk' },
+      phone: '0900000003'
+    });
+    console.log('✅ Đã tạo 3 tài khoản Lãnh đạo Tỉnh Đoàn (Bí thư + 2 Phó Bí thư)');
+
     const canBoHSV = await User.create({
       username: 'Cán bộ HSV VN Tỉnh Đắk Lắk',
       email: 'canbotinh@daklak.hsv.vn',
@@ -396,6 +437,10 @@ async function seed() {
     console.log('   2. Cán bộ Tỉnh:       tinh@daklak.gov.vn          | Pass: 123456');
     console.log('   3. Cán bộ Tỉnh Đoàn:  canbotinh@daklak.hsv.vn     | Pass: Password123!');
     console.log('   4. 102 Cán bộ Xã:     [Tenxa]@gmail.com           | Pass: Password123!');
+    console.log('   ─────────────────────────────────────────────────────────────────────────────');
+    console.log('   5. 👑 Bí thư:    luongminhtung.bithu@tinhdbdl.gov.vn | Pass: BithuDaklak@2026');
+    console.log('   6. 👔 Phó BT 1:  nguyenthaogiang.pbt@tinhdbdl.gov.vn | Pass: PhobithuDaklak@2026');
+    console.log('   7. 👔 Phó BT 2:  ylepasstor.pbt@tinhdbdl.gov.vn      | Pass: PhobithuDaklak@2026');
     console.log('═══════════════════════════════════════════════════════════════════════════════════════════════════════════════');
     console.log('');
 

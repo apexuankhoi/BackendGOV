@@ -5,15 +5,32 @@ const taskSchema = new mongoose.Schema({
   agencyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agency', default: null },
 
   // Thông tin công việc
-  title: { type: String, required: true },                // Tên công việc
-  description: { type: String, default: '' },             // Mô tả chi tiết
+  title: { type: String, required: true },
+  description: { type: String, default: '' },
 
-  // Người liên quan
-  assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },  // Người giao
-  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },                  // Người thực hiện
+  // ===== PHÂN CẤP GIAO VIỆC =====
+  assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Người giao
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },                 // Người nhận chính
+  // Giao lại (ủy quyền) - PBT giao cho Trưởng phòng, TP giao cho Cán bộ
+  delegatedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  // Task cha (nếu đây là sub-task được giao lại)
+  parentTask: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', default: null },
+  // Cấp giao: 0=BT giao, 1=PBT giao, 2=TP giao
+  delegationLevel: { type: Number, default: 0, min: 0, max: 3 },
+  // Người theo dõi
+  watchers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  // ================================
 
   // Thời hạn
   deadline: { type: Date },
+  startDate: { type: Date, default: Date.now },
+
+  // Màu sắc deadline (tính tự động)
+  deadlineColor: {
+    type: String,
+    enum: ['green', 'yellow', 'red', 'gray'],
+    default: 'gray'
+  },
   
   // Mức độ & Trạng thái
   priority: {
@@ -23,36 +40,74 @@ const taskSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Chưa thực hiện', 'Đang thực hiện', 'Hoàn thành', 'Quá hạn', 'Hủy'],
+    enum: ['Chưa thực hiện', 'Đang thực hiện', 'Chờ duyệt', 'Hoàn thành', 'Quá hạn', 'Hủy'],
     default: 'Chưa thực hiện'
   },
-  progress: { type: Number, default: 0, min: 0, max: 100 },  // % tiến độ
+  progress: { type: Number, default: 0, min: 0, max: 100 },
+
+  // ===== FILE ĐÍNH KÈM =====
+  attachments: [{
+    fileName: String,
+    fileUrl: String,
+    fileType: String,
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    uploadedAt: { type: Date, default: Date.now }
+  }],
+
+  // ===== BÌNH LUẬN / CẬP NHẬT TIẾN ĐỘ =====
+  comments: [{
+    author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    content: { type: String, required: true },
+    progressUpdate: { type: Number, default: null }, // % tiến độ khi comment
+    createdAt: { type: Date, default: Date.now }
+  }],
 
   // Liên kết với văn bản (nếu có)
   sourceDocument: { type: mongoose.Schema.Types.ObjectId, ref: 'Document' },
   
   // AI
-  aiGenerated: { type: Boolean, default: false },         // Được AI tạo?
-  aiSolution: { type: String, default: '' },              // AI giải quyết hộ (Nội dung raw/Markdown)
+  aiGenerated: { type: Boolean, default: false },
+  aiSolution: { type: String, default: '' },
   aiGeneratedFiles: [{
     fileName: String,
     filePath: String,
     fileType: String
   }],
 
-  
-  // Metadata
   notes: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
 
-taskSchema.pre('save', async function() {
+// Tự động tính màu deadline & cập nhật trạng thái quá hạn
+taskSchema.pre('save', function(next) {
   this.updatedAt = new Date();
-  // Tự đánh dấu quá hạn
-  if (this.deadline && new Date() > this.deadline && this.status !== 'Hoàn thành' && this.status !== 'Hủy') {
+
+  // Tự động quá hạn
+  if (this.deadline && new Date() > this.deadline && 
+      !['Hoàn thành', 'Hủy'].includes(this.status)) {
     this.status = 'Quá hạn';
+    this.deadlineColor = 'red';
+  } else if (this.deadline && this.status !== 'Hoàn thành') {
+    const daysLeft = Math.ceil((new Date(this.deadline) - new Date()) / (1000 * 60 * 60 * 24));
+    if (daysLeft <= 0) {
+      this.deadlineColor = 'red';
+    } else if (daysLeft <= 5) {
+      this.deadlineColor = 'yellow';
+    } else {
+      this.deadlineColor = 'green';
+    }
+  } else if (this.status === 'Hoàn thành') {
+    this.deadlineColor = 'green';
   }
+
+  next();
 });
+
+// Index tìm kiếm nhanh
+taskSchema.index({ assignedTo: 1, status: 1 });
+taskSchema.index({ assignedBy: 1 });
+taskSchema.index({ parentTask: 1 });
+taskSchema.index({ deadline: 1 });
 
 module.exports = mongoose.model('Task', taskSchema);
