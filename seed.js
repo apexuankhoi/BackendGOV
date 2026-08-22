@@ -209,7 +209,61 @@ async function seed() {
       locationContext: { province: 'Đắk Lắk' },
       phone: '0900000003'
     });
-    console.log('✅ Đã tạo 3 tài khoản Lãnh đạo Tỉnh Đoàn (Bí thư + 2 Phó Bí thư)');
+
+    // ── CÁC BAN CHUYÊN MÔN CƠ QUAN TỈNH ĐOÀN ──────────────────────────────
+    const banPhongTrao = await User.create({
+      username: 'Ban Phong trào Tỉnh Đoàn',
+      email: 'banphongtrao@tinhdbdl.gov.vn',
+      password: pwAdmin, // 123456
+      role: 'ADMIN',
+      position: 'TRUONG_PHONG',
+      department: 'PHONG_TRAO',
+      positionLabel: 'Trưởng Ban Phong trào',
+      agencyId: provinceAgency._id,
+      locationContext: { province: 'Đắk Lắk' },
+      phone: '0900000004'
+    });
+
+    const banTuyenGiao = await User.create({
+      username: 'Ban Tuyên giáo Tỉnh Đoàn',
+      email: 'bantuyengiao@tinhdbdl.gov.vn',
+      password: pwAdmin,
+      role: 'ADMIN',
+      position: 'TRUONG_PHONG',
+      department: 'TUYEN_GIAO',
+      positionLabel: 'Trưởng Ban Tuyên giáo',
+      agencyId: provinceAgency._id,
+      locationContext: { province: 'Đắk Lắk' },
+      phone: '0900000005'
+    });
+
+    const banToChuc = await User.create({
+      username: 'Ban Tổ chức - Kiểm tra',
+      email: 'bantochuckt@tinhdbdl.gov.vn',
+      password: pwAdmin,
+      role: 'ADMIN',
+      position: 'TRUONG_PHONG',
+      department: 'TO_CHUC',
+      positionLabel: 'Trưởng Ban Tổ chức - Kiểm tra',
+      agencyId: provinceAgency._id,
+      locationContext: { province: 'Đắk Lắk' },
+      phone: '0900000006'
+    });
+
+    const vanPhong = await User.create({
+      username: 'Văn phòng Tỉnh Đoàn',
+      email: 'vanphong@tinhdbdl.gov.vn',
+      password: pwAdmin,
+      role: 'ADMIN',
+      position: 'TRUONG_PHONG',
+      department: 'VAN_PHONG',
+      positionLabel: 'Chánh Văn phòng Tỉnh Đoàn',
+      agencyId: provinceAgency._id,
+      locationContext: { province: 'Đắk Lắk' },
+      phone: '0900000007'
+    });
+
+    console.log('✅ Đã tạo các tài khoản Ban/Văn phòng Cơ quan Tỉnh Đoàn');
 
     const canBoHSV = await User.create({
       username: 'Cán bộ HSV VN Tỉnh Đắk Lắk',
@@ -420,6 +474,77 @@ async function seed() {
         parentId: folderDoc._id
       }
     ]);
+
+    // ── 9. Tạo Danh sách Nhiệm vụ & Hoạt động mẫu Thường trực Tỉnh Đoàn ──────
+    const sampleTasks = [
+      {
+        title: 'Triển khai ra quân Chiến dịch 44 ngày đêm Thanh niên tiên phong Chuyển đổi số năm 2026',
+        description: 'Chỉ đạo 102 xã/phường đồng loạt ra quân các Đội hình Thanh niên số, hướng dẫn kích hoạt VNeID mức 2 và Dịch vụ công trực tuyến cho nhân dân.',
+        assignedBy: biThu._id,
+        inChargeLeader: phoBiThu2._id, // Đ/c Y Lê Pas Tơr
+        advisoryDepartment: 'Ban Phong trào',
+        assignedTo: banPhongTrao._id,
+        advisoryOfficerName: 'Đ/c Trưởng Ban Phong trào',
+        cooperatingUnits: 'Ban Tuyên giáo, Văn phòng, 102 Đoàn xã/phường',
+        deadline: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), // Còn 10 ngày
+        priority: 'Khẩn',
+        status: 'Đang thực hiện',
+        progress: 65,
+        agencyId: provinceAgency._id,
+        deadlineColor: 'green'
+      },
+      {
+        title: 'Tổ chức Hội nghị tập huấn Kỹ năng số & Ứng dụng AI cho Cán bộ Đoàn toàn tỉnh',
+        description: 'Xây dựng tài liệu tập huấn soạn thảo văn bản tự động, thiết kế infographic truyền thông và quản lý dữ liệu 11 chỉ tiêu bằng Trí tuệ Nhân tạo.',
+        assignedBy: biThu._id,
+        inChargeLeader: phoBiThu1._id, // Đ/c Nguyễn Thao Giang
+        advisoryDepartment: 'Ban Tuyên giáo',
+        assignedTo: banTuyenGiao._id,
+        advisoryOfficerName: 'Đ/c Trưởng Ban Tuyên giáo',
+        cooperatingUnits: 'Văn phòng Tỉnh Đoàn, Ban TTN-TH',
+        deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // Còn 3 ngày (Vàng)
+        priority: 'Cao',
+        status: 'Đang thực hiện',
+        progress: 40,
+        agencyId: provinceAgency._id,
+        deadlineColor: 'yellow'
+      },
+      {
+        title: 'Kiểm tra, giám sát tiến độ thành lập Đội hình Thanh niên số tại các xã vùng sâu vùng xa',
+        description: 'Thành lập 3 đoàn kiểm tra thực tế tại các huyện Krông Bông, M’Drắk, Ea Súp về việc triển khai cài đặt ứng dụng số cho bà con buôn làng.',
+        assignedBy: biThu._id,
+        inChargeLeader: phoBiThu2._id, // Đ/c Y Lê Pas Tơr
+        advisoryDepartment: 'Ban Tổ chức - Kiểm tra',
+        assignedTo: banToChuc._id,
+        advisoryOfficerName: 'Đ/c Trưởng Ban Tổ chức - KT',
+        cooperatingUnits: 'Ban Phong trào, Huyện đoàn Ea Súp, M’Drắk',
+        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        priority: 'Trung bình',
+        status: 'Chờ duyệt',
+        progress: 100,
+        agencyId: provinceAgency._id,
+        deadlineColor: 'green'
+      },
+      {
+        title: 'Tổng hợp báo cáo tuần Chiến dịch 44 ngày đêm gửi Thường trực Tỉnh ủy và UBND Tỉnh',
+        description: 'Thu thập số liệu 11 chỉ tiêu từ 102 xã/phường, trích xuất biểu đồ tiến độ và tham mưu văn bản báo cáo Lãnh đạo Tỉnh.',
+        assignedBy: biThu._id,
+        inChargeLeader: phoBiThu1._id, // Đ/c Nguyễn Thao Giang
+        advisoryDepartment: 'Văn phòng',
+        assignedTo: vanPhong._id,
+        advisoryOfficerName: 'Đ/c Chánh Văn phòng Tỉnh Đoàn',
+        cooperatingUnits: 'Tất cả các Ban chuyên môn Tỉnh Đoàn',
+        deadline: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // Quá hạn 1 ngày (Đỏ)
+        priority: 'Thượng khẩn',
+        status: 'Quá hạn',
+        progress: 30,
+        agencyId: provinceAgency._id,
+        deadlineColor: 'red'
+      }
+    ];
+
+    await Task.insertMany(sampleTasks);
+    console.log('✅ Đã tạo các nhiệm vụ & hoạt động mẫu của Thường trực Tỉnh Đoàn');
 
     console.log('');
     console.log('🎉 🎉 🎉 ĐÃ RESET TOÀN BỘ TIẾN ĐỘ & SỐ LIỆU VỀ 0 THÀNH CÔNG! 🎉 🎉 🎉');

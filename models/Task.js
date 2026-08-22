@@ -8,14 +8,31 @@ const taskSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String, default: '' },
 
-  // ===== PHÂN CẤP GIAO VIỆC =====
-  assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Người giao
-  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },                 // Người nhận chính
-  // Giao lại (ủy quyền) - PBT giao cho Trưởng phòng, TP giao cho Cán bộ
+  // ===== PHÂN CẤP GIAO VIỆC & CHỈ ĐẠO THƯỜNG TRỰC TỈNH ĐOÀN =====
+  assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Người chỉ đạo (Bí thư/Thường trực)
+  
+  // Lãnh đạo phụ trách trực tiếp (Phó Bí thư: A. Giang hoặc A. Pas)
+  inChargeLeader: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  
+  // Ban / Phòng ban tham mưu chính
+  advisoryDepartment: { 
+    type: String, 
+    enum: ['Ban Phong trào', 'Ban Tuyên giáo', 'Ban Tổ chức - Kiểm tra', 'Văn phòng', 'Ban TTN - Trường học', 'Cơ quan Tỉnh Đoàn', 'Khác'],
+    default: 'Ban Phong trào' 
+  },
+  
+  // Cán bộ / Đơn vị tham mưu chính (người nhận trách nhiệm chính)
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  advisoryOfficerName: { type: String, default: '' }, // Tên cán bộ tham mưu cụ thể (nếu có)
+  
+  // Đơn vị / Cán bộ phối hợp
+  cooperatingUnits: { type: String, default: '' },
+  
+  // Giao lại (ủy quyền) - PBT giao cho Trưởng ban, Trưởng ban giao cho Cán bộ
   delegatedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   // Task cha (nếu đây là sub-task được giao lại)
   parentTask: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', default: null },
-  // Cấp giao: 0=BT giao, 1=PBT giao, 2=TP giao
+  // Cấp giao: 0=BT giao, 1=PBT giao, 2=Trưởng ban giao
   delegationLevel: { type: Number, default: 0, min: 0, max: 3 },
   // Người theo dõi
   watchers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
@@ -25,7 +42,7 @@ const taskSchema = new mongoose.Schema({
   deadline: { type: Date },
   startDate: { type: Date, default: Date.now },
 
-  // Màu sắc deadline (tính tự động)
+  // Màu sắc deadline (tính tự động: 🟢 Còn > 5 ngày, 🟡 Sắp hạn <= 5 ngày, 🔴 Quá hạn)
   deadlineColor: {
     type: String,
     enum: ['green', 'yellow', 'red', 'gray'],
@@ -35,7 +52,7 @@ const taskSchema = new mongoose.Schema({
   // Mức độ & Trạng thái
   priority: {
     type: String,
-    enum: ['Thấp', 'Trung bình', 'Cao', 'Rất cao'],
+    enum: ['Thấp', 'Trung bình', 'Cao', 'Khẩn', 'Thượng khẩn'],
     default: 'Trung bình'
   },
   status: {

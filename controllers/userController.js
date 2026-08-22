@@ -10,15 +10,36 @@ exports.getUsers = async (req, res) => {
   }
 };
 
-// Lấy danh sách cán bộ để giao việc (có position/department)
+// Lấy danh sách cán bộ để giao việc (phân cấp thông minh: Thường trực, Cán bộ cơ quan tỉnh, Cán bộ xã)
 exports.getStaffList = async (req, res) => {
   try {
+    const { scope } = req.query; // 'province' | 'all'
     const staffRoles = ['COMMUNE_ADMIN', 'PROVINCE_ADMIN', 'ADMIN', 'SENIOR_ADMIN'];
-    const users = await User.find({ role: { $in: staffRoles } })
-      .select('username email role position department positionLabel agencyId')
-      .populate('agencyId', 'name')
-      .sort({ role: 1, username: 1 });
-    res.json(users);
+    
+    let query = { role: { $in: staffRoles } };
+    if (scope === 'province') {
+      // Chỉ lấy Thường trực và Cán bộ Cơ quan cấp Tỉnh (không lấy 102 xã)
+      query.role = { $in: ['SENIOR_ADMIN', 'PROVINCE_ADMIN', 'ADMIN'] };
+    }
+
+    const users = await User.find(query)
+      .select('username email role position department positionLabel agencyId phone')
+      .populate('agencyId', 'name level')
+      .sort({ role: 1, position: 1, username: 1 });
+
+    // Phân loại nhóm sẵn cho Frontend
+    const deputies = users.filter(u => u.position === 'PHO_BI_THU' || u.role === 'PROVINCE_ADMIN');
+    const provinceStaff = users.filter(u => 
+      ['ADMIN', 'PROVINCE_ADMIN', 'SENIOR_ADMIN'].includes(u.role) && u.position !== 'BI_THU'
+    );
+    const communeStaff = users.filter(u => u.role === 'COMMUNE_ADMIN');
+
+    res.json({
+      all: users,
+      deputies,
+      provinceStaff,
+      communeStaff
+    });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server' });
   }

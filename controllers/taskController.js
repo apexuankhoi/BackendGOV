@@ -8,7 +8,7 @@ const POPULATE_USER = 'username email role position department positionLabel';
 // ========== LẤY DANH SÁCH CÔNG VIỆC ==========
 exports.getTasks = async (req, res) => {
   try {
-    const { status, priority, assignedTo, search, view } = req.query;
+    const { status, priority, assignedTo, inChargeLeader, department, search, view } = req.query;
     const userId = req.user.userId;
     const role = req.user.role;
 
@@ -18,10 +18,11 @@ exports.getTasks = async (req, res) => {
     if (['SENIOR_ADMIN', 'PROVINCE_ADMIN'].includes(role)) {
       if (req.user.agencyId) query.agencyId = req.user.agencyId;
     } else if (role === 'ADMIN') {
-      // Trưởng phòng/ban: thấy task được giao cho mình hoặc mình giao đi
+      // Trưởng phòng/ban: thấy task được giao cho mình, mình phụ trách hoặc mình giao đi
       query.$or = [
         { assignedTo: userId },
         { assignedBy: userId },
+        { inChargeLeader: userId },
         { delegatedTo: userId }
       ];
     } else {
@@ -35,12 +36,18 @@ exports.getTasks = async (req, res) => {
     if (status) query.status = status;
     if (priority) query.priority = priority;
     if (assignedTo) query.assignedTo = assignedTo;
+    if (inChargeLeader) query.inChargeLeader = inChargeLeader;
+    if (department) query.advisoryDepartment = department;
+    
     if (search) {
       query.$and = query.$and || [];
       query.$and.push({
         $or: [
           { title: { $regex: search, $options: 'i' } },
-          { description: { $regex: search, $options: 'i' } }
+          { description: { $regex: search, $options: 'i' } },
+          { advisoryDepartment: { $regex: search, $options: 'i' } },
+          { advisoryOfficerName: { $regex: search, $options: 'i' } },
+          { cooperatingUnits: { $regex: search, $options: 'i' } }
         ]
       });
     }
@@ -53,11 +60,12 @@ exports.getTasks = async (req, res) => {
 
     const tasks = await Task.find(query)
       .populate('assignedBy', POPULATE_USER)
+      .populate('inChargeLeader', POPULATE_USER)
       .populate('assignedTo', POPULATE_USER)
       .populate('delegatedTo', POPULATE_USER)
       .populate('watchers', POPULATE_USER)
       .populate('parentTask', 'title status')
-      .populate('comments.author', 'username avatar')
+      .populate('comments.author', 'username avatar positionLabel')
       .populate('sourceDocument', 'documentNumber summary')
       .sort({ createdAt: -1 });
 
@@ -192,11 +200,26 @@ exports.getTaskStats = async (req, res) => {
   }
 };
 
-// ========== TẠO CÔNG VIỆC ==========
+// ========== TẠO CÔNG VIỆC / NỘI DUNG HOẠT ĐỘNG ==========
 exports.createTask = async (req, res) => {
   try {
-    const { title, description, assignedTo, deadline, priority, notes, parentTask, delegationLevel, sourceDocument } = req.body;
-    if (!title) return res.status(400).json({ message: 'Thiếu tiêu đề công việc' });
+    const { 
+      title, 
+      description, 
+      inChargeLeader, 
+      advisoryDepartment, 
+      assignedTo, 
+      advisoryOfficerName, 
+      cooperatingUnits, 
+      deadline, 
+      priority, 
+      notes, 
+      parentTask, 
+      delegationLevel, 
+      sourceDocument 
+    } = req.body;
+    
+    if (!title) return res.status(400).json({ message: 'Thiếu tên nội dung hoạt động / công việc' });
 
     // Tính deadlineColor ngay lúc tạo
     let deadlineColor = 'gray';
@@ -210,7 +233,13 @@ exports.createTask = async (req, res) => {
     }
 
     const task = await Task.create({
-      title, description, assignedTo: assignedTo || undefined,
+      title, 
+      description: description || '',
+      inChargeLeader: inChargeLeader || null,
+      advisoryDepartment: advisoryDepartment || 'Ban Phong trào',
+      assignedTo: assignedTo || undefined,
+      advisoryOfficerName: advisoryOfficerName || '',
+      cooperatingUnits: cooperatingUnits || '',
       deadline: deadline || undefined,
       priority: priority || 'Trung bình',
       notes: notes || '',
@@ -227,24 +256,26 @@ exports.createTask = async (req, res) => {
       await Task.findByIdAndUpdate(parentTask, { $push: { delegatedTo: assignedTo } });
     }
 
-    // Realtime notification
+    // Realtime notification cho người nhận & lãnh đạo phụ trách
     const io = req.app.get('io');
-    if (io && assignedTo) {
-      io.emit('taskAssigned', { taskId: task._id, assignedTo, title });
+    if (io) {
+      if (assignedTo) io.emit('taskAssigned', { taskId: task._id, assignedTo, title });
+      if (inChargeLeader) io.emit('taskAssigned', { taskId: task._id, assignedTo: inChargeLeader, title });
     }
 
     await ActivityLog.create({
       user: req.user.userId,
       action: 'CREATE_TASK',
       target: task.title,
-      details: `Giao cho: ${assignedTo || 'Chưa gán'} — Deadline: ${deadline ? new Date(deadline).toLocaleDateString('vi-VN') : 'Không có'}`
+      details: `Ban tham mưu: ${advisoryDepartment} — Deadline: ${deadline ? new Date(deadline).toLocaleDateString('vi-VN') : 'Không có'}`
     });
 
     const populated = await Task.findById(task._id)
       .populate('assignedBy', POPULATE_USER)
+      .populate('inChargeLeader', POPULATE_USER)
       .populate('assignedTo', POPULATE_USER);
 
-    res.status(201).json({ message: 'Tạo công việc thành công', task: populated });
+    res.status(201).json({ message: 'Tạo nội dung hoạt động thành công', task: populated });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
