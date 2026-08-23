@@ -69,57 +69,84 @@ exports.submitReport = async (req, res) => {
     const User = require('../models/User');
     const currentUser = await User.findById(req.user.userId || req.user._id);
 
+    // ─── BƯỚC 1: Lấy từ User object trong DB ─────────────────────────────────
     if (!agencyId && currentUser?.agencyId) {
       agencyId = currentUser.agencyId;
     }
 
+    // ─── BƯỚC 2: Lấy từ body nếu frontend gửi lên ────────────────────────────
     if (!agencyId && req.body.agencyId) {
       const candidate = await Agency.findById(req.body.agencyId);
       if (candidate) agencyId = candidate._id;
     }
 
-    // Tự động tìm Agency theo địa chỉ xã/phường của tài khoản
+    // ─── BƯỚC 3: Tìm theo locationContext.commune ────────────────────────────
     if (!agencyId && currentUser?.locationContext?.commune) {
       const comm = currentUser.locationContext.commune;
       const clean = comm.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
       let matchedAgency = await Agency.findOne({ name: comm });
-      if (!matchedAgency) {
-        matchedAgency = await Agency.findOne({ name: { $regex: clean, $options: 'i' } });
-      }
+      if (!matchedAgency) matchedAgency = await Agency.findOne({ name: { $regex: `^${clean}$`, $options: 'i' } });
+      if (!matchedAgency) matchedAgency = await Agency.findOne({ name: { $regex: clean, $options: 'i' } });
       if (matchedAgency) {
         agencyId = matchedAgency._id;
-        currentUser.agencyId = agencyId;
-        await currentUser.save();
+        if (currentUser) { currentUser.agencyId = agencyId; await currentUser.save(); }
       }
     }
 
-    // Fallback cuối: dùng commune gửi từ Frontend nếu vẫn chưa tìm được
+    // ─── BƯỚC 4: Tìm theo commune gửi từ Frontend ────────────────────────────
     if (!agencyId && req.body.commune) {
       const bodyComm = req.body.commune;
       const bodyClean = bodyComm.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
       let matchedAgency = await Agency.findOne({ name: bodyComm });
-      if (!matchedAgency) {
-        matchedAgency = await Agency.findOne({ name: { $regex: bodyClean, $options: 'i' } });
-      }
+      if (!matchedAgency) matchedAgency = await Agency.findOne({ name: { $regex: `^${bodyClean}$`, $options: 'i' } });
+      if (!matchedAgency) matchedAgency = await Agency.findOne({ name: { $regex: bodyClean, $options: 'i' } });
       if (matchedAgency) {
         agencyId = matchedAgency._id;
-        // Cập nhật luôn vào User profile
-        if (currentUser && !currentUser.agencyId) {
-          currentUser.agencyId = agencyId;
-          await currentUser.save();
+        if (currentUser && !currentUser.agencyId) { currentUser.agencyId = agencyId; await currentUser.save(); }
+      }
+    }
+
+    // ─── BƯỚC 5: Tìm theo username / email của user (khớp tên xã trong email) ─
+    if (!agencyId && currentUser) {
+      const emailPart = (currentUser.email || '').split('@')[0].toLowerCase();
+      const allAgencies = await Agency.find({ level: 'COMMUNE' }).lean();
+      for (const ag of allAgencies) {
+        const agClean = ag.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '').toLowerCase();
+        if (emailPart.includes(agClean) || agClean.includes(emailPart.substring(0, 5))) {
+          agencyId = ag._id;
+          if (currentUser) { currentUser.agencyId = agencyId; await currentUser.save(); }
+          break;
         }
       }
     }
 
-    // Xác thực chắc chắn AgencyId tồn tại trong DB
+    // ─── BƯỚC 6: Xác thực Agency tồn tại trong DB ────────────────────────────
     let validAgency = null;
     if (agencyId) {
       validAgency = await Agency.findById(agencyId);
     }
 
+    // ─── BƯỚC 7 (CUỐI): Tự động tạo Agency mới nếu user có đủ thông tin commune ─
+    if (!validAgency) {
+      const communeName = req.body.commune || currentUser?.locationContext?.commune;
+      if (communeName) {
+        validAgency = await Agency.create({
+          name: communeName,
+          level: 'COMMUNE',
+          province: 'Đắk Lắk',
+          description: `Đơn vị Xã/Phường ${communeName} - Tự động tạo`
+        });
+        agencyId = validAgency._id;
+        if (currentUser) { currentUser.agencyId = agencyId; await currentUser.save(); }
+        console.log(`[Auto-create Agency] Đã tự động tạo Agency: ${communeName}`);
+      }
+    }
+
+    // ─── Vẫn không tìm được → Báo lỗi rõ ràng ───────────────────────────────
     if (!validAgency) {
       return res.status(403).json({ 
-        message: '⚠️ Tài khoản chưa được liên kết với Đơn vị Xã/Phường hợp lệ. Vui lòng cập nhật đơn vị công tác hoặc liên hệ Quản trị viên Tỉnh.' 
+        message: '⚠️ Tài khoản chưa được liên kết với Đơn vị Xã/Phường. Vui lòng liên hệ Quản trị viên Tỉnh Đoàn để được gắn đơn vị.',
+        hint: 'Cần bổ sung thông tin: Xã/Phường công tác trong phần Thông tin tài khoản.'
       });
     }
 

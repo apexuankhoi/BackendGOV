@@ -119,11 +119,25 @@ exports.register = async (req, res) => {
     if (commune) {
       const Agency = require('../models/Agency');
       const cleanCommune = commune.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
+      // Tìm chính xác trước
       let matchedAgency = await Agency.findOne({ name: commune });
-      if (!matchedAgency) {
-        matchedAgency = await Agency.findOne({ name: { $regex: cleanCommune, $options: 'i' } });
-      }
+      // Tìm khớp tuyệt đối không phân biệt hoa thường
+      if (!matchedAgency) matchedAgency = await Agency.findOne({ name: { $regex: `^${cleanCommune}$`, $options: 'i' } });
+      // Tìm có chứa tên
+      if (!matchedAgency) matchedAgency = await Agency.findOne({ name: { $regex: cleanCommune, $options: 'i' } });
+      // Tìm với tiền tố Đoàn xã / Xã
+      if (!matchedAgency) matchedAgency = await Agency.findOne({ name: { $regex: cleanCommune.substring(0, 5), $options: 'i' } });
+
       if (matchedAgency) {
+        userAgencyId = matchedAgency._id;
+      } else {
+        // Tự động tạo Agency mới nếu không tìm thấy để đảm bảo không bị lỗi khi nộp báo cáo
+        matchedAgency = await Agency.create({
+          name: commune,
+          level: 'COMMUNE',
+          province: province || 'Đắk Lắk',
+          description: `Đơn vị ${commune} - Tự động tạo khi đăng ký`
+        });
         userAgencyId = matchedAgency._id;
       }
     }
@@ -155,19 +169,19 @@ exports.login = async (req, res) => {
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
     
-    // Tự động tìm & gán Agency nếu tài khoản chưa được liên kết
+    // ── Tự động tìm & gán Agency nếu tài khoản bị mồ côi agencyId ──────────
     if (!user.agencyId && user.locationContext?.commune) {
       const Agency = require('../models/Agency');
       const comm = user.locationContext.commune;
       const cleanCommune = comm.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
       let matchedAgency = await Agency.findOne({ name: comm });
-      if (!matchedAgency) {
-        matchedAgency = await Agency.findOne({ name: { $regex: cleanCommune, $options: 'i' } });
-      }
+      if (!matchedAgency) matchedAgency = await Agency.findOne({ name: { $regex: `^${cleanCommune}$`, $options: 'i' } });
+      if (!matchedAgency) matchedAgency = await Agency.findOne({ name: { $regex: cleanCommune, $options: 'i' } });
       if (matchedAgency) {
         user.agencyId = matchedAgency._id;
         await user.save();
         user = await User.findById(user._id).populate('agencyId', 'name level');
+        console.log(`[Login Auto-Fix] Gán agencyId cho user ${user.email}: ${matchedAgency.name}`);
       }
     }
 
