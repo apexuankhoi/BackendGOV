@@ -69,15 +69,19 @@ exports.submitReport = async (req, res) => {
     const User = require('../models/User');
     const currentUser = await User.findById(req.user.userId || req.user._id);
 
+    // === DEBUG: In ra trạng thái ban đầu của user ===
+    console.log(`[submitReport] User: ${currentUser?.email} | JWT agencyId: ${agencyId} | DB agencyId: ${currentUser?.agencyId} | commune: ${currentUser?.locationContext?.commune}`);
+
     // ─── BƯỚC 1: Lấy từ User object trong DB ─────────────────────────────────
     if (!agencyId && currentUser?.agencyId) {
       agencyId = currentUser.agencyId;
+      console.log(`[submitReport] B1 → agencyId từ DB: ${agencyId}`);
     }
 
     // ─── BƯỚC 2: Lấy từ body nếu frontend gửi lên ────────────────────────────
     if (!agencyId && req.body.agencyId) {
       const candidate = await Agency.findById(req.body.agencyId);
-      if (candidate) agencyId = candidate._id;
+      if (candidate) { agencyId = candidate._id; console.log(`[submitReport] B2 → agencyId từ body`); }
     }
 
     // ─── BƯỚC 3: Tìm theo locationContext.commune ────────────────────────────
@@ -90,6 +94,9 @@ exports.submitReport = async (req, res) => {
       if (matchedAgency) {
         agencyId = matchedAgency._id;
         if (currentUser) { currentUser.agencyId = agencyId; await currentUser.save(); }
+        console.log(`[submitReport] B3 → tìm được Agency theo commune: ${matchedAgency.name}`);
+      } else {
+        console.log(`[submitReport] B3 → KHÔNG tìm thấy Agency cho commune: "${comm}"`);
       }
     }
 
@@ -103,6 +110,9 @@ exports.submitReport = async (req, res) => {
       if (matchedAgency) {
         agencyId = matchedAgency._id;
         if (currentUser && !currentUser.agencyId) { currentUser.agencyId = agencyId; await currentUser.save(); }
+        console.log(`[submitReport] B4 → tìm được Agency theo body.commune: ${matchedAgency.name}`);
+      } else {
+        console.log(`[submitReport] B4 → KHÔNG tìm thấy Agency cho body.commune: "${bodyComm}"`);
       }
     }
 
@@ -115,6 +125,7 @@ exports.submitReport = async (req, res) => {
         if (emailPart.includes(agClean) || agClean.includes(emailPart.substring(0, 5))) {
           agencyId = ag._id;
           if (currentUser) { currentUser.agencyId = agencyId; await currentUser.save(); }
+          console.log(`[submitReport] B5 → khớp email với Agency: ${ag.name}`);
           break;
         }
       }
@@ -124,11 +135,13 @@ exports.submitReport = async (req, res) => {
     let validAgency = null;
     if (agencyId) {
       validAgency = await Agency.findById(agencyId);
+      if (!validAgency) console.log(`[submitReport] B6 → agencyId ${agencyId} KHÔNG tồn tại trong DB (dead ref)`);
     }
 
     // ─── BƯỚC 7 (CUỐI): Tự động tạo Agency mới nếu user có đủ thông tin commune ─
     if (!validAgency) {
       const communeName = req.body.commune || currentUser?.locationContext?.commune;
+      console.log(`[submitReport] B7 → communeName để auto-create: "${communeName}"`);
       if (communeName) {
         validAgency = await Agency.create({
           name: communeName,
@@ -144,6 +157,7 @@ exports.submitReport = async (req, res) => {
 
     // ─── Vẫn không tìm được → Báo lỗi rõ ràng ───────────────────────────────
     if (!validAgency) {
+      console.log(`[submitReport] ❌ FAILED: Không thể xác định Agency cho user ${currentUser?.email}`);
       return res.status(403).json({ 
         message: '⚠️ Tài khoản chưa được liên kết với Đơn vị Xã/Phường. Vui lòng liên hệ Quản trị viên Tỉnh Đoàn để được gắn đơn vị.',
         hint: 'Cần bổ sung thông tin: Xã/Phường công tác trong phần Thông tin tài khoản.'

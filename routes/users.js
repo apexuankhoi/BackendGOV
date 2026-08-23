@@ -17,10 +17,16 @@ const checkSenior = (req, res, next) => {
 const { uploadCloudinary } = require('../config/cloudinary');
 
 router.get('/', authMiddleware, checkStaff, userController.getUsers);
-router.get('/staff', authMiddleware, checkStaff, userController.getStaffList);   // Danh sách cán bộ để giao việc
+router.get('/staff', authMiddleware, checkStaff, userController.getStaffList);
 router.post('/', authMiddleware, checkSenior, userController.createUser);
 router.delete('/:id', authMiddleware, checkSenior, userController.deleteUser);
 router.post('/:id/avatar', authMiddleware, uploadCloudinary.single('avatar'), userController.uploadAvatar);
-router.put('/:id/position', authMiddleware, checkSenior, userController.updateUserPosition); // Cập nhật chức vụ
+router.put('/:id/position', authMiddleware, checkSenior, userController.updateUserPosition);
+
+// Gán Agency cho User (Admin tỉnh fix thủ công)
+router.patch('/:id/agency', authMiddleware, checkSenior, userController.assignAgency);
+
+// Tự động sửa tất cả User thiếu agencyId (Admin chạy 1 lần)
+router.post('/auto-fix-agencies', authMiddleware, checkSenior, userController.autoFixAllAgencies);
 
 module.exports = router;

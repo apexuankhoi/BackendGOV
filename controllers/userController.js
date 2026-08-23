@@ -132,3 +132,55 @@ exports.updateUserPosition = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 };
+
+// Gán Agency cho User (dành cho Admin tỉnh fix thủ công)
+exports.assignAgency = async (req, res) => {
+  try {
+    const Agency = require('../models/Agency');
+    const { agencyId } = req.body;
+    if (!agencyId) return res.status(400).json({ message: 'Thiếu agencyId' });
+
+    const agency = await Agency.findById(agencyId);
+    if (!agency) return res.status(404).json({ message: 'Agency không tồn tại' });
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { agencyId, 'locationContext.commune': agency.name },
+      { returnDocument: 'after', runValidators: true }
+    ).select('-password').populate('agencyId', 'name level');
+
+    if (!user) return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+    res.json({ message: `Đã gán đơn vị "${agency.name}" cho ${user.username}`, user });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
+
+// Tự động sửa tất cả User thiếu agencyId (Admin chạy một lần)
+exports.autoFixAllAgencies = async (req, res) => {
+  try {
+    const Agency = require('../models/Agency');
+    const users = await User.find({ agencyId: null, 'locationContext.commune': { $exists: true, $ne: '' } });
+    let fixed = 0, failed = [];
+
+    for (const user of users) {
+      const comm = user.locationContext.commune;
+      const clean = comm.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
+      let ag = await Agency.findOne({ name: comm });
+      if (!ag) ag = await Agency.findOne({ name: { $regex: `^${clean}$`, $options: 'i' } });
+      if (!ag) ag = await Agency.findOne({ name: { $regex: clean, $options: 'i' } });
+
+      if (ag) {
+        user.agencyId = ag._id;
+        await user.save();
+        fixed++;
+      } else {
+        failed.push({ email: user.email, commune: comm });
+      }
+    }
+
+    res.json({ message: `Đã sửa ${fixed} tài khoản`, fixed, failed });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+};
