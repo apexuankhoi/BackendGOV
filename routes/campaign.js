@@ -10,9 +10,10 @@ router.get('/stats', campaignController.getGlobalStats);
 router.get('/config', campaignController.getReportingConfig);
 router.put('/config', authMiddleware, campaignController.updateReportingConfig);
 
-// Protected routes (Dành cho cấp xã báo cáo)
+// Protected routes (Dành cho cấp xã báo cáo & xem lại lịch sử các ngày)
 router.post('/report', authMiddleware, campaignController.submitReport);
 router.get('/report', authMiddleware, campaignController.getMyReport);
+router.get('/my-history', authMiddleware, campaignController.getMyHistory);
 
 // Danh sách tiến độ và link minh chứng 102 Xã/Phường
 router.get('/communes-status', campaignController.getCommunesReportStatus);

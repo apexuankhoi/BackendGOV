@@ -13,6 +13,29 @@ function parseTimeToMinutes(timeStr, defaultMinutes) {
   return h * 60 + m;
 }
 
+// Helper chuẩn hóa dải thời gian một ngày (00:00:00.000 đến 23:59:59.999) theo múi giờ
+function getDayRange(dateInput) {
+  let targetDate;
+  if (!dateInput) {
+    targetDate = new Date();
+  } else if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    const [y, m, d] = dateInput.split('-').map(Number);
+    targetDate = new Date(y, m - 1, d, 12, 0, 0); // lấy giữa trưa để tránh lệch múi giờ
+  } else {
+    targetDate = new Date(dateInput);
+  }
+
+  const start = new Date(targetDate);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(targetDate);
+  end.setHours(23, 59, 59, 999);
+
+  const normalized = new Date(start);
+
+  return { start, end, normalized };
+}
+
 // Lấy hoặc tạo cấu hình mặc định
 async function getCampaignReportingConfig() {
   let config = await SystemConfig.findOne({ key: 'campaign_reporting' });
@@ -115,11 +138,13 @@ exports.submitReport = async (req, res) => {
       cleanEvidenceLinks = 'https://' + cleanEvidenceLinks;
     }
 
-    // 2. Chuẩn hóa ngày hiện tại về 00:00:00
-    const dateObj = new Date();
-    dateObj.setHours(0, 0, 0, 0);
+    // 2. Chuẩn hóa ngày báo cáo theo dải thời gian chuẩn
+    const range = getDayRange(reportDate || Date.now());
 
-    const existingReport = await CampaignReport.findOne({ agencyId, reportDate: dateObj });
+    const existingReport = await CampaignReport.findOne({ 
+      agencyId, 
+      reportDate: { $gte: range.start, $lte: range.end } 
+    });
 
     // 3. Kiểm tra khung giờ từ Cấu hình Động của Hệ thống
     const config = await getCampaignReportingConfig();
@@ -156,7 +181,7 @@ exports.submitReport = async (req, res) => {
     const updateData = {
       agencyId,
       reporterId: req.user?.userId || req.user?._id,
-      reportDate: dateObj,
+      reportDate: range.normalized,
       // 11 CHỈ TIÊU CHÍNH THỨC
       digitalSkills: Number(digitalSkills) || 0,     // 1. Kỹ năng số
       vneidSupport: Number(vneidSupport) || 0,       // 2. VNeID
@@ -182,11 +207,16 @@ exports.submitReport = async (req, res) => {
       updatedAt: Date.now()
     };
 
-    const report = await CampaignReport.findOneAndUpdate(
-      { agencyId, reportDate: dateObj },
-      updateData,
-      { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
-    );
+    let report;
+    if (existingReport) {
+      report = await CampaignReport.findByIdAndUpdate(
+        existingReport._id,
+        updateData,
+        { returnDocument: 'after' }
+      );
+    } else {
+      report = await CampaignReport.create(updateData);
+    }
 
     // 3. Tự động khởi tạo / Cập nhật Đội hình Thanh niên số của xã tương ứng vào bảng Team
     try {
@@ -289,17 +319,20 @@ exports.submitReport = async (req, res) => {
   }
 };
 
-// Lấy báo cáo của đơn vị trong ngày (để hiển thị lại lên form nếu họ đã nộp)
+// Lấy báo cáo của đơn vị trong ngày đã chọn (hỗ trợ xem lại các ngày trước)
 exports.getMyReport = async (req, res) => {
   try {
     const agencyId = req.user.agencyId;
     if (!agencyId) return res.json(null);
 
     const { date } = req.query;
-    const dateObj = new Date(date || Date.now());
-    dateObj.setHours(0, 0, 0, 0);
+    const range = getDayRange(date || Date.now());
 
-    const report = await CampaignReport.findOne({ agencyId, reportDate: dateObj });
+    const report = await CampaignReport.findOne({ 
+      agencyId, 
+      reportDate: { $gte: range.start, $lte: range.end } 
+    }).populate('agencyId', 'name district').populate('reporterId', 'username email');
+
     res.json(report);
   } catch (error) {
     console.error('Error getMyReport:', error);
@@ -307,15 +340,29 @@ exports.getMyReport = async (req, res) => {
   }
 };
 
+// Lấy toàn bộ lịch sử báo cáo của đơn vị mình theo từng ngày (từ mới nhất đến cũ nhất)
+exports.getMyHistory = async (req, res) => {
+  try {
+    const agencyId = req.user.agencyId;
+    if (!agencyId) return res.json([]);
+
+    const reports = await CampaignReport.find({ agencyId })
+      .populate('agencyId', 'name district')
+      .populate('reporterId', 'username email')
+      .sort({ reportDate: -1, createdAt: -1 });
+
+    res.json(reports);
+  } catch (error) {
+    console.error('Error getMyHistory:', error);
+    res.status(500).json({ message: 'Lỗi lấy lịch sử báo cáo' });
+  }
+};
+
 // Thống kê toàn tỉnh: Cả Lũy kế và Số liệu trong ngày
 exports.getGlobalStats = async (req, res) => {
   try {
     const { date } = req.query;
-    let selectedDate = new Date();
-    if (date) {
-      selectedDate = new Date(date);
-    }
-    selectedDate.setHours(0, 0, 0, 0);
+    const range = getDayRange(date || Date.now());
 
     const [cumStatsAgg, dailyStatsAgg, activeAgenciesCount, rawTotalAgencies] = await Promise.all([
       CampaignReport.aggregate([
@@ -343,7 +390,9 @@ exports.getGlobalStats = async (req, res) => {
       ]),
       CampaignReport.aggregate([
         {
-          $match: { reportDate: selectedDate }
+          $match: { 
+            reportDate: { $gte: range.start, $lte: range.end } 
+          }
         },
         {
           $group: {
@@ -397,7 +446,7 @@ exports.getGlobalStats = async (req, res) => {
     };
 
     const daily = {
-      date: selectedDate,
+      date: range.normalized,
       digitalSkills: d.totalDigitalSkills || 0,
       vneid: d.totalVneid || 0,
       publicServices: d.totalPublicServices || 0,
@@ -433,8 +482,7 @@ exports.getGlobalStats = async (req, res) => {
 exports.getCommunesReportStatus = async (req, res) => {
   try {
     const { date } = req.query;
-    const dateObj = new Date(date || Date.now());
-    dateObj.setHours(0, 0, 0, 0);
+    const range = getDayRange(date || Date.now());
 
     // Lấy danh sách các xã/phường
     const communes = await Agency.find({ level: 'COMMUNE' })
@@ -442,8 +490,10 @@ exports.getCommunesReportStatus = async (req, res) => {
       .sort({ name: 1 })
       .lean();
 
-    // Lấy báo cáo theo ngày
-    const reports = await CampaignReport.find({ reportDate: dateObj })
+    // Lấy báo cáo theo dải ngày
+    const reports = await CampaignReport.find({ 
+      reportDate: { $gte: range.start, $lte: range.end } 
+    })
       .populate('reporterId', 'username email')
       .lean();
 
@@ -460,8 +510,8 @@ exports.getCommunesReportStatus = async (req, res) => {
         district: c.district || '',
         hasReported: !!rep,
         reportId: rep?._id || null,
-        reportDate: dateObj,
-        reporterName: rep?.reporterId?.username || '',
+        reportDate: range.normalized,
+        reporterName: rep?.reporterId?.username || rep?.reporterName || '',
         evidenceLinks: rep?.evidenceLinks || '',
         issues: rep?.issues || '',
         proposals: rep?.proposals || '',
@@ -485,7 +535,7 @@ exports.getCommunesReportStatus = async (req, res) => {
     const totalCount = result.length > 0 ? result.length : 102;
 
     res.json({
-      date: dateObj,
+      date: range.normalized,
       totalCount: totalCount > 102 ? 102 : totalCount,
       reportedCount,
       unreportedCount: Math.max(0, (totalCount > 102 ? 102 : totalCount) - reportedCount),
@@ -501,10 +551,11 @@ exports.getCommunesReportStatus = async (req, res) => {
 exports.getAllReports = async (req, res) => {
   try {
     const { date } = req.query;
-    const dateObj = new Date(date || Date.now());
-    dateObj.setHours(0, 0, 0, 0);
+    const range = getDayRange(date || Date.now());
 
-    let reports = await CampaignReport.find({ reportDate: dateObj })
+    let reports = await CampaignReport.find({ 
+      reportDate: { $gte: range.start, $lte: range.end } 
+    })
       .populate('agencyId', 'name level district')
       .populate('reporterId', 'username email role locationContext')
       .sort({ updatedAt: -1 });
