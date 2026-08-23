@@ -71,11 +71,21 @@ exports.submitReport = async (req, res) => {
     // === DEBUG LOG ===
     console.log(`[submitReport] User: ${currentUser?.email} | JWT agencyId: ${req.user.agencyId} | DB agencyId: ${currentUser?.agencyId} | commune: ${currentUser?.locationContext?.commune}`);
 
+    // ─── ZOMBIE TOKEN CHECK: JWT hợp lệ nhưng User đã bị xóa khỏi DB ────────
+    // Trường hợp: DB bị wipe (seed.js), user chưa đăng nhập lại, token cũ
+    if (!currentUser) {
+      console.log(`[submitReport] ⚠️ ZOMBIE TOKEN: userId=${req.user.userId} không tồn tại trong DB → buộc đăng nhập lại`);
+      return res.status(401).json({
+        message: 'Phiên đăng nhập không hợp lệ. Vui lòng đăng xuất và đăng nhập lại.',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
     // ─── QUAN TRỌNG: Luôn ưu tiên agencyId từ DB, không tin JWT ─────────────
     // Lý do: JWT có thể chứa agencyId CŨ (trước khi seed.js xóa dữ liệu).
-    // DB luôn được cập nhật đúng hơn JWT token cached ở browser.
-    let agencyId = currentUser?.agencyId || req.user.agencyId || null;
+    let agencyId = currentUser.agencyId || req.user.agencyId || null;
     console.log(`[submitReport] agencyId sau ưu tiên DB: ${agencyId}`);
+
 
     // ─── BƯỚC 1: Xác thực agencyId hiện tại có tồn tại trong DB không ───────
     let validAgency = null;
