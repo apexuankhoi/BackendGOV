@@ -1,7 +1,8 @@
-﻿const cron = require('node-cron');
+const cron = require('node-cron');
 const Document = require('../models/Document');
 const User = require('../models/User');
 const nodemailer = require('nodemailer');
+const { runBackup } = require('./backup');
 
 const sendDeadlineAlerts = async () => {
   try {
@@ -68,11 +69,26 @@ const sendDeadlineAlerts = async () => {
 };
 
 const initCron = () => {
+  // ── Nhắc nhở deadline văn bản (07:00 hàng ngày) ─────────────────────────
   cron.schedule('0 7 * * *', () => {
     console.log('⏳ Đang chạy Cron Job nhắc nhở deadline...');
     sendDeadlineAlerts();
   });
-  console.log('✅ Đã khởi tạo Cron Job nhắc nhở (07:00 AM hàng ngày).');
+  console.log('✅ Cron: Nhắc nhở deadline (07:00 hàng ngày)');
+
+  // ── Backup tự động mỗi 12 giờ (01:00 và 13:00) ──────────────────────────
+  cron.schedule('0 1,13 * * *', async () => {
+    console.log('⏳ Cron Job: Bắt đầu backup tự động...');
+    await runBackup();
+  });
+  console.log('✅ Cron: Backup tự động (01:00 và 13:00 hàng ngày)');
+
+  // ── Chạy backup ngay khi server khởi động (lần đầu) ─────────────────────
+  setTimeout(async () => {
+    console.log('⏳ Chạy backup lần đầu sau khi server khởi động...');
+    await runBackup();
+  }, 10000); // Chờ 10 giây để DB kết nối xong
 };
 
 module.exports = { initCron };
+

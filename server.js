@@ -166,6 +166,8 @@ app.use('/api/agencies', require('./routes/agencies'));
 app.use('/api/campaign', require('./routes/campaign'));
 app.use('/api/support-requests', require('./routes/supportRequests'));
 app.use('/api/smartweb', require('./routes/smartweb'));
+app.use('/api/backup', require('./routes/backup'));
+
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running correctly.' });
