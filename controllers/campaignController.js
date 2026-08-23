@@ -66,19 +66,59 @@ exports.submitReport = async (req, res) => {
     } = req.body;
 
     const User = require('../models/User');
-    const currentUser = await User.findById(req.user.userId || req.user._id);
+    let currentUser = await User.findById(req.user.userId || req.user._id);
 
     // === DEBUG LOG ===
     console.log(`[submitReport] User: ${currentUser?.email} | JWT agencyId: ${req.user.agencyId} | DB agencyId: ${currentUser?.agencyId} | commune: ${currentUser?.locationContext?.commune}`);
 
-    // ─── ZOMBIE TOKEN CHECK: JWT hợp lệ nhưng User đã bị xóa khỏi DB ────────
-    // Trường hợp: DB bị wipe (seed.js), user chưa đăng nhập lại, token cũ
+    // ─── AUTO-RECOVERY: JWT hợp lệ nhưng User đã bị xóa khỏi DB ────────────
+    // Thay vì báo lỗi, tự động tái tạo User record từ JWT + commune body
     if (!currentUser) {
-      console.log(`[submitReport] ⚠️ ZOMBIE TOKEN: userId=${req.user.userId} không tồn tại trong DB → buộc đăng nhập lại`);
-      return res.status(401).json({
-        message: 'Phiên đăng nhập không hợp lệ. Vui lòng đăng xuất và đăng nhập lại.',
-        code: 'USER_NOT_FOUND'
-      });
+      const communeFromBody = req.body.commune;
+      const communeFromHeader = req.headers['x-commune'];
+      const recoverCommune = communeFromBody || communeFromHeader || '';
+      const recoverRole = req.user.role || 'COMMUNE_ADMIN';
+      const userId = req.user.userId || req.user._id;
+
+      console.log(`[submitReport] ⚡ AUTO-RECOVERY: tái tạo User ${userId} | commune: "${recoverCommune}"`);
+
+      // Tìm hoặc tạo Agency trước
+      let recoverAgency = null;
+      if (recoverCommune) {
+        const clean = recoverCommune.replace(/^(Xã|Phường|Đoàn xã|Đoàn phường)\s*/i, '').trim();
+        recoverAgency = await Agency.findOne({ name: recoverCommune });
+        if (!recoverAgency) recoverAgency = await Agency.findOne({ name: { $regex: `^${clean}$`, $options: 'i' } });
+        if (!recoverAgency) recoverAgency = await Agency.findOne({ name: { $regex: clean, $options: 'i' } });
+        if (!recoverAgency) {
+          recoverAgency = await Agency.create({ name: recoverCommune, level: 'COMMUNE', description: `${recoverCommune} - Tự động tạo khi phục hồi` });
+        }
+      }
+
+      // Tạo lại User với cùng ObjectId từ JWT để token cũ vẫn hoạt động
+      try {
+        const mongoose = require('mongoose');
+        const recoveredId = new mongoose.Types.ObjectId(userId);
+        currentUser = await User.create({
+          _id: recoveredId,
+          username: recoverCommune || `Recovered_${String(userId).slice(-6)}`,
+          email: `recovered_${String(userId).slice(-6)}@webgov.local`,
+          password: `$2a$10$placeholder_hashed_password_${String(userId).slice(-6)}`,
+          role: recoverRole,
+          agencyId: recoverAgency?._id || null,
+          locationContext: { province: 'Đắk Lắk', commune: recoverCommune }
+        });
+        console.log(`[submitReport] ✅ AUTO-RECOVERY thành công: ${currentUser.email} | agency: ${recoverAgency?.name}`);
+      } catch (recoverErr) {
+        // Nếu _id bị conflict (trùng), thử findById lại
+        currentUser = await User.findById(userId);
+        if (!currentUser) {
+          console.log(`[submitReport] ❌ AUTO-RECOVERY thất bại: ${recoverErr.message}`);
+          return res.status(403).json({
+            message: '⚠️ Không thể khôi phục tài khoản. Vui lòng đăng xuất và đăng nhập lại.',
+            code: 'RECOVERY_FAILED'
+          });
+        }
+      }
     }
 
     // ─── QUAN TRỌNG: Luôn ưu tiên agencyId từ DB, không tin JWT ─────────────
