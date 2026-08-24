@@ -827,7 +827,6 @@ exports.exportExcel = async (req, res) => {
 
       // Định nghĩa cột
       const cols = [
-        { header: 'STT', key: 'stt', width: 6 },
         { header: 'Đơn vị', key: 'agency', width: 28 },
         { header: 'Người nộp', key: 'reporter', width: 18 },
         { header: 'Ngày báo cáo', key: 'reportDate', width: 14 },
@@ -872,7 +871,6 @@ exports.exportExcel = async (req, res) => {
       // Data rows
       reports.forEach((r, idx) => {
         const rowData = {
-          stt: idx + 1,
           agency: r.agencyId?.name || 'Không rõ',
           reporter: r.reporterId?.username || 'Không rõ',
           reportDate: new Date(r.reportDate).toLocaleDateString('vi-VN'),
@@ -919,7 +917,7 @@ exports.exportExcel = async (req, res) => {
       // Tổng cộng
       if (reports.length > 0) {
         const totalRow = ws.addRow({
-          stt: '', agency: `TỔNG (${reports.length} đơn vị)`,
+          agency: `TỔNG (${reports.length} đơn vị)`,
           reporter: '', reportDate: '',
           digitalSkills: reports.reduce((s, r) => s + (r.digitalSkills || 0), 0),
           vneidSupport: reports.reduce((s, r) => s + (r.vneidSupport || 0), 0),
@@ -950,7 +948,6 @@ exports.exportExcel = async (req, res) => {
     if (filterStatus === 'not_reported' || filterStatus === 'all') {
       const ws2 = wb.addWorksheet('❌ Chưa báo cáo');
       ws2.columns = [
-        { header: 'STT', key: 'stt', width: 6 },
         { header: 'Tên Đơn vị', key: 'name', width: 35 },
         { header: 'Cấp', key: 'level', width: 14 },
         { header: 'Ghi chú', key: 'note', width: 30 },
@@ -964,7 +961,6 @@ exports.exportExcel = async (req, res) => {
 
       notReportedAgencies.sort((a, b) => a.name.localeCompare(b.name, 'vi')).forEach((ag, idx) => {
         const row = ws2.addRow({
-          stt: idx + 1,
           name: ag.name,
           level: ag.level === 'COMMUNE' ? 'Xã/Phường' : ag.level,
           note: 'Chưa nộp báo cáo'
@@ -976,8 +972,8 @@ exports.exportExcel = async (req, res) => {
         }
       });
       ws2.addRow({});
-      const sumRow = ws2.addRow({ stt: '', name: `Tổng chưa báo cáo: ${notReportedAgencies.length} đơn vị`, level: '', note: '' });
-      sumRow.getCell(2).font = { bold: true, color: { argb: 'FFDC2626' }, size: 12 };
+      const sumRow = ws2.addRow({ name: `Tổng chưa báo cáo: ${notReportedAgencies.length} đơn vị`, level: '', note: '' });
+      sumRow.getCell(1).font = { bold: true, color: { argb: 'FFDC2626' }, size: 12 };
     }
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
