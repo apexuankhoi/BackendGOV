@@ -237,7 +237,14 @@ exports.submitReport = async (req, res) => {
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    if (!config.alwaysOpen) {
+    // ── Kiểm tra allowLateDate: Cho phép nộp muộn cho ngày cụ thể ─────────
+    // Admin set allowLateDate = 'YYYY-MM-DD' để mở cổng cho ngày đó
+    const isLateAllowed = config.allowLateDate && reportDate && (
+      config.allowLateDate === reportDate ||
+      new Date(config.allowLateDate).toDateString() === new Date(reportDate).toDateString()
+    );
+
+    if (!config.alwaysOpen && !isLateAllowed) {
       const openMinutes = parseTimeToMinutes(config.openTime, 13 * 60);
       const closeMinutes = parseTimeToMinutes(config.closeTime, 18 * 60 + 30);
       const editMinutes = parseTimeToMinutes(config.editDeadline || config.closeTime, 19 * 60);
@@ -262,6 +269,10 @@ exports.submitReport = async (req, res) => {
           config: { openTime: config.openTime, closeTime: config.closeTime, editDeadline: config.editDeadline, alwaysOpen: config.alwaysOpen }
         });
       }
+    }
+
+    if (isLateAllowed) {
+      console.log(`[submitReport] ✅ Nộp muộn được phép cho ngày: ${reportDate} (allowLateDate: ${config.allowLateDate})`);
     }
 
     const updateData = {
@@ -984,6 +995,7 @@ exports.getReportingConfig = async (req, res) => {
       closeTime: config.closeTime || '18:30',
       editDeadline: config.editDeadline || config.closeTime || '19:00',
       alwaysOpen: !!config.alwaysOpen,
+      allowLateDate: config.allowLateDate || null,
       customNotice: config.customNotice || '',
       campaignStartDate: config.campaignStartDate || '2026-08-01',
       campaignEndDate: config.campaignEndDate || '2026-09-13',
@@ -1007,7 +1019,8 @@ exports.updateReportingConfig = async (req, res) => {
 
     const { 
       openTime, closeTime, editDeadline, alwaysOpen, customNotice,
-      campaignStartDate, campaignEndDate, campaignTotalDays, campaignName
+      campaignStartDate, campaignEndDate, campaignTotalDays, campaignName,
+      allowLateDate
     } = req.body;
     
     // Validate format HH:mm
@@ -1036,6 +1049,7 @@ exports.updateReportingConfig = async (req, res) => {
       closeTime: closeTime || '18:30',
       editDeadline: editDeadline || closeTime || '19:00',
       alwaysOpen: Boolean(alwaysOpen),
+      allowLateDate: allowLateDate || null,  // null = tắt chế độ nộp muộn
       customNotice: customNotice || '',
       updatedBy: req.user.userId || req.user._id,
       updatedAt: Date.now()
