@@ -783,130 +783,215 @@ exports.assignAgencyToReport = async (req, res) => {
   }
 };
 
-// Xuất Excel báo cáo chiến dịch (Tỉnh) - Đầy đủ 11 chỉ tiêu
+// Xuất Excel báo cáo chiến dịch (Tỉnh) - Đầy đủ 11 chỉ tiêu + Filter nâng cao
 exports.exportExcel = async (req, res) => {
   try {
-    const { date, startDate, endDate } = req.query;
-    let filter = {};
+    const { 
+      date, startDate, endDate,
+      filterStatus = 'reported',   // 'reported' | 'not_reported' | 'all'
+      includeEvidence = 'true',    // link minh chứng
+      includeDifficulties = 'true', // khó khăn + đề xuất
+      includeProposals = 'true',
+    } = req.query;
 
+    let dateFilter = {};
     if (date) {
       const d = new Date(date);
       d.setHours(0, 0, 0, 0);
-      filter.reportDate = d;
+      dateFilter.reportDate = d;
     } else if (startDate && endDate) {
-      filter.reportDate = {
+      dateFilter.reportDate = {
         $gte: new Date(startDate),
         $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
       };
     }
 
-    const reports = await CampaignReport.find(filter)
+    // ── Lấy báo cáo đã nộp ─────────────────────────────────────────────────
+    const reports = await CampaignReport.find(dateFilter)
       .populate('agencyId', 'name')
-      .populate('reporterId', 'username')
+      .populate('reporterId', 'username email')
       .sort({ reportDate: -1, updatedAt: -1 });
 
+    // ── Lấy tất cả đơn vị cấp xã ───────────────────────────────────────────
+    const allAgencies = await Agency.find({ level: 'COMMUNE' }).lean();
+    const reportedAgencyIds = new Set(reports.map(r => String(r.agencyId?._id || r.agencyId)));
+    const notReportedAgencies = allAgencies.filter(a => !reportedAgencyIds.has(String(a._id)));
+
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Báo cáo Chiến dịch 44 ngày');
 
-    ws.columns = [
-      { header: 'Đơn vị', key: 'agency', width: 25 },
-      { header: 'Người nộp', key: 'reporter', width: 18 },
-      { header: 'Ngày báo cáo', key: 'reportDate', width: 15 },
-      // 11 Chỉ tiêu
-      { header: '1. Kỹ năng số', key: 'digitalSkills', width: 15 },
-      { header: '2. VNeID mức 2', key: 'vneidSupport', width: 15 },
-      { header: '3. DVC Trực tuyến', key: 'publicServices', width: 16 },
-      { header: '4. HKD dùng QR', key: 'qrSupport', width: 15 },
-      { header: '5. Đội hình TN số', key: 'activeTeams', width: 15 },
-      { header: '6. Lớp tập huấn', key: 'trainingClasses', width: 15 },
-      { header: '7. Mô hình CĐS', key: 'digitalModels', width: 15 },
-      { header: '8. SP OCOP/Địa phương', key: 'digitalProducts', width: 18 },
-      { header: '9. TN học AI', key: 'youthTrained', width: 14 },
-      { header: '10. Công trình CĐS', key: 'youthProjects', width: 16 },
-      { header: '11. Web SmartWeb', key: 'smartwebCount', width: 16 },
-      // Phụ trợ
-      { header: 'Tình nguyện viên', key: 'volunteers', width: 16 },
-      { header: 'An toàn số', key: 'safetyCampaigns', width: 14 },
-      { header: 'Bài truyền thông', key: 'mediaPosts', width: 15 },
-      { header: 'Khó khăn', key: 'issues', width: 30 },
-      { header: 'Đề xuất', key: 'proposals', width: 30 },
-    ];
+    // ═══════════════════════════════════════════════════════════════════════
+    // SHEET 1: Báo cáo đã nộp
+    // ═══════════════════════════════════════════════════════════════════════
+    if (filterStatus === 'reported' || filterStatus === 'all') {
+      const ws = wb.addWorksheet('✅ Đã báo cáo');
 
-    ws.getRow(1).eachCell(cell => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D3B6E' } };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    });
-    ws.getRow(1).height = 35;
+      // Định nghĩa cột
+      const cols = [
+        { header: 'STT', key: 'stt', width: 6 },
+        { header: 'Đơn vị', key: 'agency', width: 28 },
+        { header: 'Người nộp', key: 'reporter', width: 18 },
+        { header: 'Ngày báo cáo', key: 'reportDate', width: 14 },
+        // 11 Chỉ tiêu
+        { header: '1. Kỹ năng số', key: 'digitalSkills', width: 14 },
+        { header: '2. VNeID mức 2', key: 'vneidSupport', width: 14 },
+        { header: '3. DVC TT', key: 'publicServices', width: 14 },
+        { header: '4. HKD QR', key: 'qrSupport', width: 13 },
+        { header: '5. Đội hình', key: 'activeTeams', width: 13 },
+        { header: '6. Lớp tập huấn', key: 'trainingClasses', width: 14 },
+        { header: '7. Mô hình', key: 'digitalModels', width: 13 },
+        { header: '8. SP OCOP', key: 'digitalProducts', width: 14 },
+        { header: '9. TN học AI', key: 'youthTrained', width: 13 },
+        { header: '10. Công trình', key: 'youthProjects', width: 13 },
+        { header: '11. SmartWeb', key: 'smartwebCount', width: 13 },
+        // Phụ trợ
+        { header: 'TNV', key: 'volunteers', width: 10 },
+        { header: 'An toàn số', key: 'safetyCampaigns', width: 12 },
+        { header: 'Bài TT', key: 'mediaPosts', width: 10 },
+      ];
 
-    reports.forEach((r, idx) => {
-      const row = ws.addRow({
-        agency: r.agencyId?.name || 'Không rõ',
-        reporter: r.reporterId?.username || 'Không rõ',
-        reportDate: new Date(r.reportDate).toLocaleDateString('vi-VN'),
-        digitalSkills: r.digitalSkills || 0,
-        vneidSupport: r.vneidSupport || 0,
-        publicServices: r.publicServices || 0,
-        qrSupport: r.qrSupport || 0,
-        activeTeams: r.activeTeams || 0,
-        trainingClasses: r.trainingClasses || 0,
-        digitalModels: r.digitalModels || 0,
-        digitalProducts: r.digitalProducts || 0,
-        youthTrained: r.youthTrained || 0,
-        youthProjects: r.youthProjects || 0,
-        smartwebCount: r.smartwebCount || 0,
-        volunteers: r.volunteers || 0,
-        safetyCampaigns: r.safetyCampaigns || 0,
-        mediaPosts: r.mediaPosts || 0,
-        issues: r.issues || '',
-        proposals: r.proposals || ''
+      if (includeEvidence === 'true') {
+        cols.push({ header: '🔗 Link Minh chứng', key: 'evidenceLinks', width: 40 });
+      }
+      if (includeDifficulties === 'true') {
+        cols.push({ header: '⚠️ Khó khăn', key: 'issues', width: 35 });
+      }
+      if (includeProposals === 'true') {
+        cols.push({ header: '💡 Đề xuất', key: 'proposals', width: 35 });
+      }
+
+      ws.columns = cols;
+
+      // Header style
+      ws.getRow(1).eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D3B6E' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       });
-      if (idx % 2 === 1) {
-        row.eachCell(cell => {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F6FF' } };
+      ws.getRow(1).height = 38;
+
+      // Data rows
+      reports.forEach((r, idx) => {
+        const rowData = {
+          stt: idx + 1,
+          agency: r.agencyId?.name || 'Không rõ',
+          reporter: r.reporterId?.username || 'Không rõ',
+          reportDate: new Date(r.reportDate).toLocaleDateString('vi-VN'),
+          digitalSkills: r.digitalSkills || 0,
+          vneidSupport: r.vneidSupport || 0,
+          publicServices: r.publicServices || 0,
+          qrSupport: r.qrSupport || 0,
+          activeTeams: r.activeTeams || 0,
+          trainingClasses: r.trainingClasses || 0,
+          digitalModels: r.digitalModels || 0,
+          digitalProducts: r.digitalProducts || 0,
+          youthTrained: r.youthTrained || 0,
+          youthProjects: r.youthProjects || 0,
+          smartwebCount: r.smartwebCount || 0,
+          volunteers: r.volunteers || 0,
+          safetyCampaigns: r.safetyCampaigns || 0,
+          mediaPosts: r.mediaPosts || 0,
+        };
+        if (includeEvidence === 'true') rowData.evidenceLinks = r.evidenceLinks || '';
+        if (includeDifficulties === 'true') rowData.issues = r.issues || '';
+        if (includeProposals === 'true') rowData.proposals = r.proposals || '';
+
+        const row = ws.addRow(rowData);
+
+        // Link cell clickable nếu có
+        if (includeEvidence === 'true' && r.evidenceLinks) {
+          const lastColIdx = cols.findIndex(c => c.key === 'evidenceLinks') + 1;
+          if (lastColIdx > 0) {
+            const cell = row.getCell(lastColIdx);
+            cell.value = { text: r.evidenceLinks, hyperlink: r.evidenceLinks };
+            cell.font = { color: { argb: 'FF2563EB' }, underline: true };
+          }
+        }
+
+        if (idx % 2 === 1) {
+          row.eachCell(cell => {
+            if (!cell.font?.underline) {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F6FF' } };
+            }
+          });
+        }
+      });
+
+      // Tổng cộng
+      if (reports.length > 0) {
+        const totalRow = ws.addRow({
+          stt: '', agency: `TỔNG (${reports.length} đơn vị)`,
+          reporter: '', reportDate: '',
+          digitalSkills: reports.reduce((s, r) => s + (r.digitalSkills || 0), 0),
+          vneidSupport: reports.reduce((s, r) => s + (r.vneidSupport || 0), 0),
+          publicServices: reports.reduce((s, r) => s + (r.publicServices || 0), 0),
+          qrSupport: reports.reduce((s, r) => s + (r.qrSupport || 0), 0),
+          activeTeams: reports.reduce((s, r) => s + (r.activeTeams || 0), 0),
+          trainingClasses: reports.reduce((s, r) => s + (r.trainingClasses || 0), 0),
+          digitalModels: reports.reduce((s, r) => s + (r.digitalModels || 0), 0),
+          digitalProducts: reports.reduce((s, r) => s + (r.digitalProducts || 0), 0),
+          youthTrained: reports.reduce((s, r) => s + (r.youthTrained || 0), 0),
+          youthProjects: reports.reduce((s, r) => s + (r.youthProjects || 0), 0),
+          smartwebCount: reports.reduce((s, r) => s + (r.smartwebCount || 0), 0),
+          volunteers: reports.reduce((s, r) => s + (r.volunteers || 0), 0),
+          safetyCampaigns: reports.reduce((s, r) => s + (r.safetyCampaigns || 0), 0),
+          mediaPosts: reports.reduce((s, r) => s + (r.mediaPosts || 0), 0),
+          evidenceLinks: '', issues: '', proposals: ''
+        });
+        totalRow.eachCell(cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3E0' } };
+          cell.font = { bold: true, size: 12 };
         });
       }
-    });
+    }
 
-    // Tổng cộng
-    const totalRow = ws.addRow({
-      agency: 'TỔNG CỘNG',
-      reporter: '',
-      reportDate: `${reports.length} báo cáo`,
-      digitalSkills: reports.reduce((s, r) => s + (r.digitalSkills || 0), 0),
-      vneidSupport: reports.reduce((s, r) => s + (r.vneidSupport || 0), 0),
-      publicServices: reports.reduce((s, r) => s + (r.publicServices || 0), 0),
-      qrSupport: reports.reduce((s, r) => s + (r.qrSupport || 0), 0),
-      activeTeams: reports.reduce((s, r) => s + (r.activeTeams || 0), 0),
-      trainingClasses: reports.reduce((s, r) => s + (r.trainingClasses || 0), 0),
-      digitalModels: reports.reduce((s, r) => s + (r.digitalModels || 0), 0),
-      digitalProducts: reports.reduce((s, r) => s + (r.digitalProducts || 0), 0),
-      youthTrained: reports.reduce((s, r) => s + (r.youthTrained || 0), 0),
-      youthProjects: reports.reduce((s, r) => s + (r.youthProjects || 0), 0),
-      smartwebCount: reports.reduce((s, r) => s + (r.smartwebCount || 0), 0),
-      volunteers: reports.reduce((s, r) => s + (r.volunteers || 0), 0),
-      safetyCampaigns: reports.reduce((s, r) => s + (r.safetyCampaigns || 0), 0),
-      mediaPosts: reports.reduce((s, r) => s + (r.mediaPosts || 0), 0),
-      issues: '',
-      proposals: ''
-    });
-    totalRow.eachCell(cell => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3E0' } };
-      cell.font = { bold: true };
-    });
+    // ═══════════════════════════════════════════════════════════════════════
+    // SHEET 2: Chưa báo cáo
+    // ═══════════════════════════════════════════════════════════════════════
+    if (filterStatus === 'not_reported' || filterStatus === 'all') {
+      const ws2 = wb.addWorksheet('❌ Chưa báo cáo');
+      ws2.columns = [
+        { header: 'STT', key: 'stt', width: 6 },
+        { header: 'Tên Đơn vị', key: 'name', width: 35 },
+        { header: 'Cấp', key: 'level', width: 14 },
+        { header: 'Ghi chú', key: 'note', width: 30 },
+      ];
+      ws2.getRow(1).eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDC2626' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+      ws2.getRow(1).height = 35;
+
+      notReportedAgencies.sort((a, b) => a.name.localeCompare(b.name, 'vi')).forEach((ag, idx) => {
+        const row = ws2.addRow({
+          stt: idx + 1,
+          name: ag.name,
+          level: ag.level === 'COMMUNE' ? 'Xã/Phường' : ag.level,
+          note: 'Chưa nộp báo cáo'
+        });
+        if (idx % 2 === 1) {
+          row.eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF5F5' } };
+          });
+        }
+      });
+      ws2.addRow({});
+      const sumRow = ws2.addRow({ stt: '', name: `Tổng chưa báo cáo: ${notReportedAgencies.length} đơn vị`, level: '', note: '' });
+      sumRow.getCell(2).font = { bold: true, color: { argb: 'FFDC2626' }, size: 12 };
+    }
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    const dateLabel = date ? date : `${startDate}_${endDate}`;
-    res.setHeader('Content-Disposition', `attachment; filename=campaign_report_${dateLabel}.xlsx`);
+    const dateLabel = date ? date : (startDate ? `${startDate}_${endDate}` : 'tat_ca');
+    res.setHeader('Content-Disposition', `attachment; filename=bao_cao_chien_dich_${dateLabel}.xlsx`);
     await wb.xlsx.write(res);
     res.end();
   } catch (error) {
     console.error('Error exportExcel:', error);
-    res.status(500).json({ message: 'Lỗi xuất Excel' });
+    res.status(500).json({ message: 'Lỗi xuất Excel: ' + error.message });
   }
 };
 
-// Tổng kết DTI — Chỉ số Chuyển đổi số tỉnh (đầy đủ 11 chỉ tiêu)
+
 exports.getDtiSummary = async (req, res) => {
   try {
     const SmartwebRegistration = require('../models/SmartwebRegistration');
