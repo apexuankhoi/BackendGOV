@@ -1,11 +1,67 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 const Agency = require('./models/Agency');
 const User = require('./models/User');
 const CampaignReport = require('./models/CampaignReport');
 const Team = require('./models/Team');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/webgov_daklak';
+
+// Helper chuyển đổi tiếng Việt có dấu sang không dấu
+function removeVietnameseTones(str) {
+  if (!str) return '';
+  str = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  str = str.replace(/đ/g, 'd').replace(/Đ/g, 'D');
+  return str;
+}
+
+// Helper sinh email chuẩn hóa theo tên xã: ví dụ "Xã Ea Súp" -> "Easup@gmail.com"
+function generateCommuneEmail(communeName) {
+  let clean = communeName.replace(/^(Đoàn xã|Đoàn phường|Xã|Phường|Thị trấn)\s*/i, '').trim();
+  let noAccent = removeVietnameseTones(clean);
+  // Loại bỏ ký tự đặc biệt, dấu cách, dấu nháy
+  let slug = noAccent.replace(/[^a-zA-Z0-9]/g, '');
+  // Viết hoa chữ cái đầu: Easup@gmail.com
+  let formatted = slug.charAt(0).toUpperCase() + slug.slice(1).toLowerCase();
+  return formatted + '@gmail.com';
+}
+
+// Helper phân bổ Huyện / Thị xã tương ứng từ tên xã
+function getDistrictName(communeName) {
+  if (!communeName) return 'Đắk Lắk';
+  if (communeName.includes('Buôn Ma Thuột') || communeName.includes('Tân An') || communeName.includes('Tân Lập') || communeName.includes('Thành Nhất') || communeName.includes('Ea Kao') || communeName.includes('Hòa Phú')) {
+    return 'TP Buôn Ma Thuột';
+  } else if (communeName.includes('Buôn Hồ') || communeName.includes('Cư Bao') || communeName.includes('Ea Drông')) {
+    return 'TX Buôn Hồ';
+  } else if (communeName.includes('Ea Súp') || communeName.includes('Ea Rốk') || communeName.includes('Ea Bung') || communeName.includes('Ia Rvê') || communeName.includes('Ia Lốp')) {
+    return 'Huyện Ea Súp';
+  } else if (communeName.includes('Ea Wer') || communeName.includes('Ea Nuôl') || communeName.includes('Buôn Đôn')) {
+    return 'Huyện Buôn Đôn';
+  } else if (communeName.includes('Ea Kiết') || communeName.includes('Ea M\'Droh') || communeName.includes('Quảng Phú') || communeName.includes('Cuôr Đăng') || communeName.includes('Cư M\'gar') || communeName.includes('Ea Tul')) {
+    return 'Huyện Cư M\'gar';
+  } else if (communeName.includes('Pơng Drang') || communeName.includes('Krông Búk') || communeName.includes('Cư Pơng')) {
+    return 'Huyện Krông Búk';
+  } else if (communeName.includes('Ea Khal') || communeName.includes('Ea Drăng') || communeName.includes('Ea Wy') || communeName.includes('Ea H\'Leo') || communeName.includes('Ea Hiao')) {
+    return "Huyện Ea H'leo";
+  } else if (communeName.includes('Krông Năng') || communeName.includes('Dliê Ya') || communeName.includes('Tam Giang') || communeName.includes('Phú Xuân')) {
+    return 'Huyện Krông Năng';
+  } else if (communeName.includes('Krông Pắc') || communeName.includes('Ea Knuếc') || communeName.includes('Tân Tiến') || communeName.includes('Ea Phê') || communeName.includes('Ea Kly') || communeName.includes('Vụ Bổn')) {
+    return 'Huyện Krông Pắc';
+  } else if (communeName.includes('Ea Kar') || communeName.includes('Ea Ô') || communeName.includes('Ea Knốp') || communeName.includes('Cư Yang') || communeName.includes('Ea Păl')) {
+    return 'Huyện Ea Kar';
+  } else if (communeName.includes('M\'Drắk') || communeName.includes('Ea Riêng') || communeName.includes('Cư M\'ta') || communeName.includes('Krông Á') || communeName.includes('Cư Prao') || communeName.includes('Ea Trang')) {
+    return "Huyện M'Đrắk";
+  } else if (communeName.includes('Hòa Sơn') || communeName.includes('Dang Kang') || communeName.includes('Krông Bông') || communeName.includes('Yang Mao') || communeName.includes('Cư Pui')) {
+    return 'Huyện Krông Bông';
+  } else if (communeName.includes('Liên Sơn') || communeName.includes('Đắk Liêng') || communeName.includes('Nam Ka') || communeName.includes('Đắk Phơi')) {
+    return 'Huyện Lắk';
+  } else if (communeName.includes('Krông Nô') || communeName.includes('Ea Ning') || communeName.includes('Dray Bhăng') || communeName.includes('Ea Ktur') || communeName.includes('Krông Ana') || communeName.includes('Dur Kmăl') || communeName.includes('Ea Na')) {
+    return 'Huyện Krông Ana';
+  } else {
+    return 'Đơn vị kết nghĩa Phú Yên';
+  }
+}
 
 function getDayRange(dateInput) {
   let targetDate;
@@ -64,7 +120,6 @@ const DATES_PROGRESSION = [
   { dateStr: '2026-08-22', factor: 1.32, label: 'Ngày 22/08' }
 ];
 
-// Hàm tạo số ngẫu nhiên theo seed ổn định của xã
 function pseudoRandom(seedStr) {
   let hash = 0;
   for (let i = 0; i < seedStr.length; i++) {
@@ -76,27 +131,77 @@ function pseudoRandom(seedStr) {
 }
 
 async function seedData102Communes() {
+  console.log('================================================================');
+  console.log('🚀 BẮT ĐẦU QUY TRÌNH RESET TÀI KHOẢN & SEED DỮ LIỆU 102 XÃ PHƯỜNG');
+  console.log('================================================================\n');
+
   console.log('🔗 Đang kết nối MongoDB...');
   await mongoose.connect(MONGODB_URI);
-  console.log('✅ Đã kết nối cơ sở dữ liệu!');
+  console.log('✅ Đã kết nối cơ sở dữ liệu thành công!\n');
 
-  // 1. XÓA SẠCH DỮ LIỆU NGÀY HÔM NAY 23/08 ĐỂ ĐỂ TRỐNG CHO CÁC XÃ VÀO NỘP
+  // ===========================================================================
+  // BƯỚC 1: XÓA CÁC TÀI KHOẢN ĐỊNH DANH CŨ, GIỮ LẠI TỈNH / SUPER ADMIN
+  // ===========================================================================
+  console.log('🧹 [BƯỚC 1] Dọn dẹp tài khoản cũ:');
+  const keepRoles = ['PROVINCE_ADMIN', 'SENIOR_ADMIN', 'ADMIN'];
+  const preservedUsers = await User.find({ role: { $in: keepRoles } }).lean();
+  console.log(`   🛡️ Giữ lại ${preservedUsers.length} tài khoản Tỉnh / Quản trị viên cấp cao:`);
+  preservedUsers.forEach(u => console.log(`      - [${u.role}] ${u.username} (${u.email})`));
+
+  const deleteResult = await User.deleteMany({ role: { $nin: keepRoles } });
+  console.log(`   🗑️ Đã xóa ${deleteResult.deletedCount} tài khoản xã / người dùng cũ.\n`);
+
+  // ===========================================================================
+  // BƯỚC 2: TẠO LẬP 102 TÀI KHOẢN XÃ PHƯỜNG MỚI (ten@gmail.com / Passsword123!)
+  // ===========================================================================
+  console.log('👥 [BƯỚC 2] Khởi tạo 102 tài khoản cấp Xã/Phường chuẩn:');
+  const allCommunes = await Agency.find({ 
+    level: 'COMMUNE',
+    name: { $not: /^Chi hội/i } 
+  }).sort({ name: 1 });
+
+  console.log(`   🏛️ Tìm thấy ${allCommunes.length} đơn vị cấp Xã/Phường/Thị trấn trong danh mục Agency.\n`);
+
+  const defaultPassword = 'Passsword123!';
+  const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+  const createdUserMap = new Map(); // agencyId string -> User document
+  let createdCount = 0;
+
+  for (const commune of allCommunes) {
+    const commName = commune.name;
+    const email = generateCommuneEmail(commName);
+    const districtName = getDistrictName(commName);
+
+    const newUser = await User.create({
+      username: `Cán bộ Đoàn ${commName}`,
+      email: email,
+      password: hashedPassword,
+      role: 'COMMUNE_ADMIN',
+      agencyId: commune._id,
+      locationContext: {
+        province: 'Đắk Lắk',
+        district: districtName,
+        commune: commName
+      }
+    });
+
+    createdUserMap.set(String(commune._id), newUser);
+    createdCount++;
+    console.log(`   ✅ [${createdCount}/102] "${commName}" -> Email: ${email} | Mật khẩu: ${defaultPassword} | AgencyId: ${commune._id}`);
+  }
+
+  console.log(`\n🎉 Đã tạo thành công ${createdCount} tài khoản COMMUNE_ADMIN gắn đúng 102 agencyId!\n`);
+
+  // ===========================================================================
+  // BƯỚC 3: XÓA DỮ LIỆU HÔM NAY ĐỂ TRỐNG & ĐỒNG BỘ BÁO CÁO CHIẾN DỊCH (16/08 - 22/08)
+  // ===========================================================================
+  console.log('📊 [BƯỚC 3] Đồng bộ số liệu báo cáo chiến dịch 11 chỉ tiêu:');
   const todayRange = getDayRange(new Date());
   const deletedToday = await CampaignReport.deleteMany({
     reportDate: { $gte: todayRange.start, $lte: todayRange.end }
   });
-  console.log(`🧹 Đã xóa sạch báo cáo ngày hôm nay (${new Date().toLocaleDateString('vi-VN')}) để trống hoàn toàn (${deletedToday.deletedCount} bản ghi đã xóa).`);
-
-  // 2. Lấy danh sách toàn bộ các xã/phường (level: COMMUNE, trừ chi hội)
-  const allCommunes = await Agency.find({ 
-    level: 'COMMUNE',
-    name: { $not: /^Chi hội/i } 
-  }).lean();
-
-  console.log(`🏛️ Tìm thấy ${allCommunes.length} đơn vị cấp Xã/Phường/Thị trấn.`);
-
-  const allUsers = await User.find().lean();
-  const defaultUser = allUsers.find(u => u.role === 'PROVINCE_ADMIN' || u.role === 'SENIOR_ADMIN') || allUsers[0];
+  console.log(`   🧹 Đã làm trống ngày hôm nay (${new Date().toLocaleDateString('vi-VN')}) để các xã vào tự nộp báo cáo (${deletedToday.deletedCount} bản ghi đã dọn).`);
 
   let totalUpserted = 0;
 
@@ -108,12 +213,11 @@ async function seedData102Communes() {
     for (const commune of allCommunes) {
       const commName = commune.name;
       const cleanName = commName.replace(/^(Đoàn xã|Đoàn phường|Xã|Phường|Thị trấn)\s*/i, '').trim();
+      const user = createdUserMap.get(String(commune._id));
 
-      // Kiểm tra xem xã có trong bảng 24 xã Excel hay không
       let baseData = EXCEL_REPORTS_DAY20[commName] || EXCEL_REPORTS_DAY20[`Đoàn xã ${cleanName}`] || EXCEL_REPORTS_DAY20[`Xã ${cleanName}`] || EXCEL_REPORTS_DAY20[`Phường ${cleanName}`];
 
       if (!baseData) {
-        // Tự sinh số liệu thực tế dựa trên tên xã
         const r1 = pseudoRandom(commName + '_1');
         const r2 = pseudoRandom(commName + '_2');
         const r3 = pseudoRandom(commName + '_3');
@@ -156,20 +260,13 @@ async function seedData102Communes() {
         };
       }
 
-      // Tìm User tương ứng
-      const reporter = allUsers.find(u => 
-        String(u.agencyId) === String(commune._id) || 
-        u.email.toLowerCase().includes(commune.name.toLowerCase().replace(/\s+/g, ''))
-      ) || defaultUser;
-
       const calcVal = (val) => val === 0 ? 0 : (f === 1.0 ? val : Math.max(1, Math.round(val * f)));
-
       const cleanFolder = commName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '');
       const evidenceUrl = `https://drive.google.com/drive/folders/${cleanFolder}_MinhChungCDS_2026`;
 
       const reportData = {
         agencyId: commune._id,
-        reporterId: reporter?._id || defaultUser._id,
+        reporterId: user?._id || preservedUsers[0]?._id,
         reportDate: range.normalized,
         digitalSkills: calcVal(baseData.digitalSkills),
         vneidSupport: calcVal(baseData.vneidSupport),
@@ -198,7 +295,7 @@ async function seedData102Communes() {
         { upsert: true, returnDocument: 'after' }
       );
 
-      // Đồng bộ Team
+      // Đồng bộ Team Đội hình Thanh niên số
       try {
         const teamName = `Đội hình Thanh niên số ${commName}`;
         await Team.findOneAndUpdate(
@@ -208,6 +305,7 @@ async function seedData102Communes() {
               name: teamName,
               schoolOrUnit: `Đoàn cơ sở ${commName}`,
               agencyId: commune._id,
+              createdBy: user?._id,
               reporterName: `Cán bộ Đoàn ${commName}`,
               evidenceLinks: evidenceUrl,
               kpiSummary: {
@@ -234,13 +332,18 @@ async function seedData102Communes() {
       totalUpserted++;
     }
 
-    console.log(`✅ ${day.label}: Đã nạp thành công ${dayCount} xã/phường`);
+    console.log(`   ✅ ${day.label}: Đã nạp thành công số liệu ${dayCount} xã/phường`);
   }
 
+  // ===========================================================================
+  // TỔNG KẾT
+  // ===========================================================================
   console.log('\n============================================================');
-  console.log(`🎉 HOÀN THÀNH NẠP ĐỦ 102 XÃ/PHƯỜNG TỪ 16/08 ĐẾN 22/08!`);
+  console.log('🎉 HOÀN TẤT THÀNH CÔNG!');
+  console.log(`👥 Đã tạo mới: 102 tài khoản Xã/Phường (Email: ten@gmail.com | Mật khẩu: ${defaultPassword})`);
+  console.log(`🛡️ Giữ lại: ${preservedUsers.length} tài khoản Tỉnh / Super Admin`);
   console.log(`📊 Tổng số báo cáo lịch sử: ${totalUpserted} bản ghi.`);
-  console.log(`⚡ Ngày hôm nay (${new Date().toLocaleDateString('vi-VN')} - 23/08): HOÀN TOÀN TRỐNG để các xã tự vào nộp.`);
+  console.log(`⚡ Ngày hôm nay (${new Date().toLocaleDateString('vi-VN')}): HOÀN TOÀN TRỐNG để các xã tự nộp.`);
   console.log('============================================================\n');
 
   await mongoose.disconnect();
