@@ -316,7 +316,8 @@ exports.submitReport = async (req, res) => {
     } else {
       report = await CampaignReport.create(updateData);
     }
-    console.log(`[submitReport] ✅ ${existingReport ? 'UPDATE' : 'CREATE'} | User: ${currentUser?.email} | Commune: ${validAgency?.name} | AgencyId: ${agencyId} | ReportId: ${report?._id}`);
+    const vnTime = new Date(Date.now() + 7*60*60*1000).toISOString().replace('T',' ').substring(0,19) + ' (GMT+7)';
+    console.log(`[submitReport] ✅ ${existingReport ? 'UPDATE' : 'CREATE'} | ${vnTime} | User: ${currentUser?.email} | Commune: ${validAgency?.name} | AgencyId: ${agencyId} | ReportId: ${report?._id}`);
 
     // 3. Tự động khởi tạo / Cập nhật Đội hình Thanh niên số của xã tương ứng vào bảng Team
     try {
