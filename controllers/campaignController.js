@@ -213,7 +213,9 @@ exports.submitReport = async (req, res) => {
 
     // 1. Kiểm tra BẮT BUỘC có Link minh chứng
     let cleanEvidenceLinks = (evidenceLinks || '').trim();
+    console.log(`[submitReport] DEBUG evidenceLinks raw: "${evidenceLinks}" | clean: "${cleanEvidenceLinks}"`);
     if (!cleanEvidenceLinks) {
+      console.log(`[submitReport] ❌ BLOCK: thiếu evidenceLinks`);
       return res.status(400).json({ 
         message: '⚠️ BẮT BUỘC: Bạn phải đính kèm Link minh chứng (Link Google Drive, hình ảnh, tài liệu ra quân) khi nộp báo cáo.' 
       });
@@ -226,11 +228,13 @@ exports.submitReport = async (req, res) => {
 
     // 2. Chuẩn hóa ngày báo cáo theo dải thời gian chuẩn
     const range = getDayRange(reportDate || Date.now());
+    console.log(`[submitReport] DEBUG reportDate: "${reportDate}" | range: ${range.start} → ${range.end}`);
 
     const existingReport = await CampaignReport.findOne({ 
       agencyId, 
       reportDate: { $gte: range.start, $lte: range.end } 
     });
+    console.log(`[submitReport] DEBUG existingReport: ${existingReport ? existingReport._id : 'null (báo cáo mới)'}`);
 
     // 3. Kiểm tra khung giờ từ Cấu hình Động của Hệ thống
     const config = await getCampaignReportingConfig();
@@ -244,12 +248,17 @@ exports.submitReport = async (req, res) => {
       new Date(config.allowLateDate).toDateString() === new Date(reportDate).toDateString()
     );
 
+    console.log(`[submitReport] DEBUG config: alwaysOpen=${config.alwaysOpen} | openTime=${config.openTime} | closeTime=${config.closeTime} | editDeadline=${config.editDeadline} | allowLateDate=${config.allowLateDate}`);
+    console.log(`[submitReport] DEBUG isLateAllowed=${isLateAllowed} | currentMinutes=${currentMinutes} (${Math.floor(currentMinutes/60)}:${String(currentMinutes%60).padStart(2,'0')})`);
+
     if (!config.alwaysOpen && !isLateAllowed) {
       const openMinutes = parseTimeToMinutes(config.openTime, 13 * 60);
       const closeMinutes = parseTimeToMinutes(config.closeTime, 18 * 60 + 30);
       const editMinutes = parseTimeToMinutes(config.editDeadline || config.closeTime, 19 * 60);
+      console.log(`[submitReport] DEBUG openMinutes=${openMinutes} | closeMinutes=${closeMinutes} | editMinutes=${editMinutes}`);
 
       if (currentMinutes < openMinutes) {
+        console.log(`[submitReport] ❌ BLOCK: chưa đến giờ mở cổng`);
         return res.status(403).json({ 
           message: `Cổng báo cáo chưa mở. Thời gian nhận báo cáo bắt đầu từ ${config.openTime} hằng ngày.`,
           config: { openTime: config.openTime, closeTime: config.closeTime, editDeadline: config.editDeadline, alwaysOpen: config.alwaysOpen }
@@ -257,6 +266,7 @@ exports.submitReport = async (req, res) => {
       }
 
       if (existingReport && currentMinutes > editMinutes) {
+        console.log(`[submitReport] ❌ BLOCK: quá hạn sửa báo cáo cũ`);
         return res.status(403).json({ 
           message: `Đã quá hạn chỉnh sửa báo cáo hôm nay (Hạn chót chỉnh sửa là ${config.editDeadline || config.closeTime}).`,
           config: { openTime: config.openTime, closeTime: config.closeTime, editDeadline: config.editDeadline, alwaysOpen: config.alwaysOpen }
@@ -264,6 +274,7 @@ exports.submitReport = async (req, res) => {
       }
 
       if (!existingReport && currentMinutes > closeMinutes) {
+        console.log(`[submitReport] ❌ BLOCK: quá giờ đóng cổng nộp mới`);
         return res.status(403).json({ 
           message: `Cổng nộp báo cáo mới hôm nay đã đóng lúc ${config.closeTime}. Vui lòng liên hệ Tỉnh nếu cần gia hạn.`,
           config: { openTime: config.openTime, closeTime: config.closeTime, editDeadline: config.editDeadline, alwaysOpen: config.alwaysOpen }
@@ -305,14 +316,17 @@ exports.submitReport = async (req, res) => {
     };
 
     let report;
+    console.log(`[submitReport] DEBUG → chuẩn bị lưu DB | existingReport: ${existingReport ? 'UPDATE' : 'CREATE'}`);
     if (existingReport) {
       report = await CampaignReport.findByIdAndUpdate(
         existingReport._id,
         updateData,
         { returnDocument: 'after' }
       );
+      console.log(`[submitReport] ✅ Đã UPDATE báo cáo: ${report?._id}`);
     } else {
       report = await CampaignReport.create(updateData);
+      console.log(`[submitReport] ✅ Đã CREATE báo cáo: ${report?._id}`);
     }
 
     // 3. Tự động khởi tạo / Cập nhật Đội hình Thanh niên số của xã tương ứng vào bảng Team
