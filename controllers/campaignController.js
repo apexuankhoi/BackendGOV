@@ -4,6 +4,7 @@ const Agency = require('../models/Agency');
 const Team = require('../models/Team');
 const SystemConfig = require('../models/SystemConfig');
 const ActivityLog = require('../models/ActivityLog');
+const User = require('../models/User');
 
 // Helper parse "HH:mm" thành số phút trong ngày
 function parseTimeToMinutes(timeStr, defaultMinutes) {
@@ -800,13 +801,14 @@ exports.exportExcel = async (req, res) => {
 
     let dateFilter = {};
     if (date) {
-      const d = new Date(date);
-      d.setHours(0, 0, 0, 0);
-      dateFilter.reportDate = d;
+      const range = getDayRange(date);
+      dateFilter.reportDate = { $gte: range.start, $lte: range.end };
     } else if (startDate && endDate) {
+      const startRange = getDayRange(startDate);
+      const endRange = getDayRange(endDate);
       dateFilter.reportDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+        $gte: startRange.start,
+        $lte: endRange.end
       };
     }
 
@@ -816,8 +818,8 @@ exports.exportExcel = async (req, res) => {
       .populate('reporterId', 'username email')
       .sort({ reportDate: -1, updatedAt: -1 });
 
-    // ── Lấy tất cả đơn vị cấp xã ───────────────────────────────────────────
-    const allAgencies = await Agency.find({ level: 'COMMUNE' }).lean();
+    // ── Lấy tất cả đơn vị cấp xã (trừ chi hội) ──────────────────────────────
+    const allAgencies = await Agency.find({ level: 'COMMUNE', name: { $not: /^Chi hội/i } }).lean();
     const reportedAgencyIds = new Set(reports.map(r => String(r.agencyId?._id || r.agencyId)));
     const notReportedAgencies = allAgencies.filter(a => !reportedAgencyIds.has(String(a._id)));
 
@@ -876,8 +878,8 @@ exports.exportExcel = async (req, res) => {
       reports.forEach((r, idx) => {
         const rowData = {
           agency: r.agencyId?.name || 'Không rõ',
-          reporter: r.reporterId?.username || 'Không rõ',
-          reportDate: new Date(r.reportDate).toLocaleDateString('vi-VN'),
+          reporter: r.reporterId?.username || r.reporterName || 'Cán bộ ĐVTN',
+          reportDate: r.reportDate ? new Date(r.reportDate).toLocaleDateString('vi-VN') : '',
           digitalSkills: r.digitalSkills || 0,
           vneidSupport: r.vneidSupport || 0,
           publicServices: r.publicServices || 0,
