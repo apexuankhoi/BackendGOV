@@ -13,24 +13,30 @@ function parseTimeToMinutes(timeStr, defaultMinutes) {
   return h * 60 + m;
 }
 
-// Helper chuẩn hóa dải thời gian một ngày (00:00:00.000 đến 23:59:59.999) theo múi giờ
+// Helper chuẩn hóa dải thời gian một ngày theo UTC (tránh lệch ngày do timezone +07:00)
 function getDayRange(dateInput) {
-  let targetDate;
+  let y, m, d;
+
   if (!dateInput) {
-    targetDate = new Date();
+    // Lấy ngày hiện tại theo giờ Việt Nam (UTC+7)
+    const now = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    y = now.getUTCFullYear();
+    m = now.getUTCMonth() + 1;
+    d = now.getUTCDate();
   } else if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-    const [y, m, d] = dateInput.split('-').map(Number);
-    targetDate = new Date(y, m - 1, d, 12, 0, 0); // lấy giữa trưa để tránh lệch múi giờ
+    [y, m, d] = dateInput.split('-').map(Number);
   } else {
-    targetDate = new Date(dateInput);
+    const dt = new Date(dateInput);
+    // Đổi sang giờ VN để lấy đúng ngày
+    const vnDate = new Date(dt.getTime() + 7 * 60 * 60 * 1000);
+    y = vnDate.getUTCFullYear();
+    m = vnDate.getUTCMonth() + 1;
+    d = vnDate.getUTCDate();
   }
 
-  const start = new Date(targetDate);
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(targetDate);
-  end.setHours(23, 59, 59, 999);
-
+  // Lưu theo UTC midnight → MongoDB hiển thị đúng ngày, không bị lệch
+  const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+  const end   = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
   const normalized = new Date(start);
 
   return { start, end, normalized };
