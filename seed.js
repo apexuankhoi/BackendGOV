@@ -152,7 +152,7 @@ async function seedData102Communes() {
   console.log(`   🗑️ Đã xóa ${deleteResult.deletedCount} tài khoản xã / người dùng cũ.\n`);
 
   // ===========================================================================
-  // BƯỚC 2: TẠO LẬP 102 TÀI KHOẢN XÃ PHƯỜNG MỚI (ten@gmail.com / Passsword123!)
+  // BƯỚC 2: TẠO LẬP 102 TÀI KHOẢN XÃ PHƯỜNG MỚI (ten@gmail.com / Password123!)
   // ===========================================================================
   console.log('👥 [BƯỚC 2] Khởi tạo 102 tài khoản cấp Xã/Phường chuẩn:');
   const allCommunes = await Agency.find({ 
@@ -162,7 +162,7 @@ async function seedData102Communes() {
 
   console.log(`   🏛️ Tìm thấy ${allCommunes.length} đơn vị cấp Xã/Phường/Thị trấn trong danh mục Agency.\n`);
 
-  const defaultPassword = 'Passsword123!';
+  const defaultPassword = 'Password123!';
   const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
   const createdUserMap = new Map(); // agencyId string -> User document
