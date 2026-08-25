@@ -68,8 +68,7 @@ exports.submitReport = async (req, res) => {
     const User = require('../models/User');
     let currentUser = await User.findById(req.user.userId || req.user._id);
 
-    // === DEBUG LOG ===
-    console.log(`[submitReport] User: ${currentUser?.email} | JWT agencyId: ${req.user.agencyId} | DB agencyId: ${currentUser?.agencyId} | commune: ${currentUser?.locationContext?.commune}`);
+
 
     // ─── AUTO-RECOVERY: JWT hợp lệ nhưng User đã bị xóa khỏi DB ────────────
     // Thay vì báo lỗi, tự động tái tạo User record từ JWT + commune body
@@ -80,7 +79,7 @@ exports.submitReport = async (req, res) => {
       const recoverRole = req.user.role || 'COMMUNE_ADMIN';
       const userId = req.user.userId || req.user._id;
 
-      console.log(`[submitReport] ⚡ AUTO-RECOVERY: tái tạo User ${userId} | commune: "${recoverCommune}"`);
+
 
       // Tìm hoặc tạo Agency trước
       let recoverAgency = null;
@@ -107,12 +106,12 @@ exports.submitReport = async (req, res) => {
           agencyId: recoverAgency?._id || null,
           locationContext: { province: 'Đắk Lắk', commune: recoverCommune }
         });
-        console.log(`[submitReport] ✅ AUTO-RECOVERY thành công: ${currentUser.email} | agency: ${recoverAgency?.name}`);
+
       } catch (recoverErr) {
         // Nếu _id bị conflict (trùng), thử findById lại
         currentUser = await User.findById(userId);
         if (!currentUser) {
-          console.log(`[submitReport] ❌ AUTO-RECOVERY thất bại: ${recoverErr.message}`);
+
           return res.status(403).json({
             message: '⚠️ Không thể khôi phục tài khoản. Vui lòng đăng xuất và đăng nhập lại.',
             code: 'RECOVERY_FAILED'
@@ -124,7 +123,7 @@ exports.submitReport = async (req, res) => {
     // ─── QUAN TRỌNG: Luôn ưu tiên agencyId từ DB, không tin JWT ─────────────
     // Lý do: JWT có thể chứa agencyId CŨ (trước khi seed.js xóa dữ liệu).
     let agencyId = currentUser.agencyId || req.user.agencyId || null;
-    console.log(`[submitReport] agencyId sau ưu tiên DB: ${agencyId}`);
+
 
 
     // ─── BƯỚC 1: Xác thực agencyId hiện tại có tồn tại trong DB không ───────
@@ -132,9 +131,8 @@ exports.submitReport = async (req, res) => {
     if (agencyId) {
       validAgency = await Agency.findById(agencyId);
       if (validAgency) {
-        console.log(`[submitReport] B1 ✅ agencyId hợp lệ: ${validAgency.name}`);
+        // ok
       } else {
-        console.log(`[submitReport] B1 ❌ agencyId ${agencyId} là dead ref → thử tìm theo commune`);
         agencyId = null; // Reset để các bước fallback chạy
       }
     }
@@ -152,9 +150,6 @@ exports.submitReport = async (req, res) => {
         // Cập nhật lại DB để lần sau không phải tìm nữa
         currentUser.agencyId = agencyId;
         await currentUser.save();
-        console.log(`[submitReport] B2 ✅ tìm được qua commune DB: ${matchedAgency.name}`);
-      } else {
-        console.log(`[submitReport] B2 ❌ không tìm được Agency cho commune: "${comm}"`);
       }
     }
 
@@ -169,7 +164,7 @@ exports.submitReport = async (req, res) => {
         validAgency = matchedAgency;
         agencyId = matchedAgency._id;
         if (currentUser) { currentUser.agencyId = agencyId; await currentUser.save(); }
-        console.log(`[submitReport] B3 ✅ tìm được qua body.commune: ${matchedAgency.name}`);
+
       }
     }
 
@@ -179,14 +174,14 @@ exports.submitReport = async (req, res) => {
       if (candidate) {
         validAgency = candidate;
         agencyId = candidate._id;
-        console.log(`[submitReport] B4 ✅ agencyId từ body hợp lệ`);
+
       }
     }
 
     // ─── BƯỚC 5 (CUỐI): Tự động tạo Agency nếu có đủ thông tin commune ──────
     if (!validAgency) {
       const communeName = currentUser?.locationContext?.commune || req.body.commune;
-      console.log(`[submitReport] B5 → auto-create với commune: "${communeName}"`);
+
       if (communeName) {
         validAgency = await Agency.create({
           name: communeName,
@@ -195,13 +190,13 @@ exports.submitReport = async (req, res) => {
         });
         agencyId = validAgency._id;
         if (currentUser) { currentUser.agencyId = agencyId; await currentUser.save(); }
-        console.log(`[submitReport] B5 ✅ Tự động tạo Agency: ${communeName}`);
+
       }
     }
 
     // ─── Không tìm được sau tất cả các bước ──────────────────────────────────
     if (!validAgency) {
-      console.log(`[submitReport] ❌ FAILED hoàn toàn cho user ${currentUser?.email}`);
+
       return res.status(403).json({
         message: '⚠️ Tài khoản chưa được liên kết với Đơn vị Xã/Phường. Vui lòng liên hệ Quản trị viên Tỉnh Đoàn để được gắn đơn vị.',
         hint: 'Cần bổ sung thông tin Xã/Phường công tác trong phần Thông tin tài khoản.'
@@ -213,9 +208,7 @@ exports.submitReport = async (req, res) => {
 
     // 1. Kiểm tra BẮT BUỘC có Link minh chứng
     let cleanEvidenceLinks = (evidenceLinks || '').trim();
-    console.log(`[submitReport] DEBUG evidenceLinks raw: "${evidenceLinks}" | clean: "${cleanEvidenceLinks}"`);
     if (!cleanEvidenceLinks) {
-      console.log(`[submitReport] ❌ BLOCK: thiếu evidenceLinks`);
       return res.status(400).json({ 
         message: '⚠️ BẮT BUỘC: Bạn phải đính kèm Link minh chứng (Link Google Drive, hình ảnh, tài liệu ra quân) khi nộp báo cáo.' 
       });
@@ -228,13 +221,12 @@ exports.submitReport = async (req, res) => {
 
     // 2. Chuẩn hóa ngày báo cáo theo dải thời gian chuẩn
     const range = getDayRange(reportDate || Date.now());
-    console.log(`[submitReport] DEBUG reportDate: "${reportDate}" | range: ${range.start} → ${range.end}`);
 
     const existingReport = await CampaignReport.findOne({ 
       agencyId, 
       reportDate: { $gte: range.start, $lte: range.end } 
     });
-    console.log(`[submitReport] DEBUG existingReport: ${existingReport ? existingReport._id : 'null (báo cáo mới)'}`);
+
 
     // 3. Kiểm tra khung giờ từ Cấu hình Động của Hệ thống
     const config = await getCampaignReportingConfig();
@@ -248,17 +240,14 @@ exports.submitReport = async (req, res) => {
       new Date(config.allowLateDate).toDateString() === new Date(reportDate).toDateString()
     );
 
-    console.log(`[submitReport] DEBUG config: alwaysOpen=${config.alwaysOpen} | openTime=${config.openTime} | closeTime=${config.closeTime} | editDeadline=${config.editDeadline} | allowLateDate=${config.allowLateDate}`);
-    console.log(`[submitReport] DEBUG isLateAllowed=${isLateAllowed} | currentMinutes=${currentMinutes} (${Math.floor(currentMinutes/60)}:${String(currentMinutes%60).padStart(2,'0')})`);
+
 
     if (!config.alwaysOpen && !isLateAllowed) {
       const openMinutes = parseTimeToMinutes(config.openTime, 13 * 60);
       const closeMinutes = parseTimeToMinutes(config.closeTime, 18 * 60 + 30);
       const editMinutes = parseTimeToMinutes(config.editDeadline || config.closeTime, 19 * 60);
-      console.log(`[submitReport] DEBUG openMinutes=${openMinutes} | closeMinutes=${closeMinutes} | editMinutes=${editMinutes}`);
 
       if (currentMinutes < openMinutes) {
-        console.log(`[submitReport] ❌ BLOCK: chưa đến giờ mở cổng`);
         return res.status(403).json({ 
           message: `Cổng báo cáo chưa mở. Thời gian nhận báo cáo bắt đầu từ ${config.openTime} hằng ngày.`,
           config: { openTime: config.openTime, closeTime: config.closeTime, editDeadline: config.editDeadline, alwaysOpen: config.alwaysOpen }
@@ -266,7 +255,6 @@ exports.submitReport = async (req, res) => {
       }
 
       if (existingReport && currentMinutes > editMinutes) {
-        console.log(`[submitReport] ❌ BLOCK: quá hạn sửa báo cáo cũ`);
         return res.status(403).json({ 
           message: `Đã quá hạn chỉnh sửa báo cáo hôm nay (Hạn chót chỉnh sửa là ${config.editDeadline || config.closeTime}).`,
           config: { openTime: config.openTime, closeTime: config.closeTime, editDeadline: config.editDeadline, alwaysOpen: config.alwaysOpen }
@@ -274,7 +262,6 @@ exports.submitReport = async (req, res) => {
       }
 
       if (!existingReport && currentMinutes > closeMinutes) {
-        console.log(`[submitReport] ❌ BLOCK: quá giờ đóng cổng nộp mới`);
         return res.status(403).json({ 
           message: `Cổng nộp báo cáo mới hôm nay đã đóng lúc ${config.closeTime}. Vui lòng liên hệ Tỉnh nếu cần gia hạn.`,
           config: { openTime: config.openTime, closeTime: config.closeTime, editDeadline: config.editDeadline, alwaysOpen: config.alwaysOpen }
@@ -282,9 +269,7 @@ exports.submitReport = async (req, res) => {
       }
     }
 
-    if (isLateAllowed) {
-      console.log(`[submitReport] ✅ Nộp muộn được phép cho ngày: ${reportDate} (allowLateDate: ${config.allowLateDate})`);
-    }
+
 
     const updateData = {
       agencyId,
@@ -316,18 +301,16 @@ exports.submitReport = async (req, res) => {
     };
 
     let report;
-    console.log(`[submitReport] DEBUG → chuẩn bị lưu DB | existingReport: ${existingReport ? 'UPDATE' : 'CREATE'}`);
     if (existingReport) {
       report = await CampaignReport.findByIdAndUpdate(
         existingReport._id,
         updateData,
         { returnDocument: 'after' }
       );
-      console.log(`[submitReport] ✅ Đã UPDATE báo cáo: ${report?._id}`);
     } else {
       report = await CampaignReport.create(updateData);
-      console.log(`[submitReport] ✅ Đã CREATE báo cáo: ${report?._id}`);
     }
+    console.log(`[submitReport] ✅ ${existingReport ? 'UPDATE' : 'CREATE'} | User: ${currentUser?.email} | Commune: ${validAgency?.name} | AgencyId: ${agencyId} | ReportId: ${report?._id}`);
 
     // 3. Tự động khởi tạo / Cập nhật Đội hình Thanh niên số của xã tương ứng vào bảng Team
     try {
