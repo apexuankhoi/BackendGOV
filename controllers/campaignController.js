@@ -689,6 +689,111 @@ exports.getAllReports = async (req, res) => {
   }
 };
 
+// Chỉnh sửa số liệu 11 chỉ tiêu & thông tin báo cáo của bất kỳ xã nào (Dành cho Super Admin / Admin / Tỉnh)
+exports.adminUpdateReport = async (req, res) => {
+  try {
+    const role = req.user?.role;
+    if (!['SENIOR_ADMIN', 'ADMIN', 'PROVINCE_ADMIN'].includes(role)) {
+      return res.status(403).json({ message: 'Chỉ Quản trị viên cấp Tỉnh / Super Admin mới có quyền chỉnh sửa số liệu báo cáo.' });
+    }
+
+    const { id } = req.params;
+    const report = await CampaignReport.findById(id);
+    if (!report) {
+      return res.status(404).json({ message: 'Không tìm thấy báo cáo cần cập nhật.' });
+    }
+
+    const {
+      digitalSkills, vneidSupport, publicServices, qrSupport,
+      activeTeams, trainingClasses, digitalModels, digitalProducts,
+      youthTrained, youthProjects, smartwebCount,
+      volunteers, safetyCampaigns, mediaPosts, websitesCreated,
+      issues, proposals, evidenceLinks, reporterName
+    } = req.body;
+
+    let cleanEvidenceLinks = (evidenceLinks !== undefined ? evidenceLinks : report.evidenceLinks || '').trim();
+    if (cleanEvidenceLinks && !/^https?:\/\//i.test(cleanEvidenceLinks)) {
+      cleanEvidenceLinks = 'https://' + cleanEvidenceLinks;
+    }
+
+    // 11 Chỉ tiêu chính
+    if (digitalSkills !== undefined) report.digitalSkills = Number(digitalSkills) || 0;
+    if (vneidSupport !== undefined) report.vneidSupport = Number(vneidSupport) || 0;
+    if (publicServices !== undefined) report.publicServices = Number(publicServices) || 0;
+    if (qrSupport !== undefined) report.qrSupport = Number(qrSupport) || 0;
+    if (activeTeams !== undefined) report.activeTeams = Number(activeTeams) || 0;
+    if (trainingClasses !== undefined) report.trainingClasses = Number(trainingClasses) || 0;
+    if (digitalModels !== undefined) report.digitalModels = Number(digitalModels) || 0;
+    if (digitalProducts !== undefined) report.digitalProducts = Number(digitalProducts) || 0;
+    if (youthTrained !== undefined) report.youthTrained = Number(youthTrained) || 0;
+    if (youthProjects !== undefined) report.youthProjects = Number(youthProjects) || 0;
+    if (smartwebCount !== undefined) report.smartwebCount = Number(smartwebCount) || 0;
+
+    // Số liệu bổ trợ
+    if (volunteers !== undefined) report.volunteers = Number(volunteers) || 0;
+    if (safetyCampaigns !== undefined) report.safetyCampaigns = Number(safetyCampaigns) || 0;
+    if (mediaPosts !== undefined) report.mediaPosts = Number(mediaPosts) || 0;
+    if (websitesCreated !== undefined) report.websitesCreated = Number(websitesCreated) || 0;
+
+    // Thông tin bổ sung
+    if (issues !== undefined) report.issues = issues;
+    if (proposals !== undefined) report.proposals = proposals;
+    if (cleanEvidenceLinks !== undefined) report.evidenceLinks = cleanEvidenceLinks;
+    if (reporterName !== undefined && reporterName.trim()) report.reporterName = reporterName.trim();
+
+    report.updatedAt = Date.now();
+    await report.save();
+
+    // Tự động đồng bộ với Team (Đội hình Thanh niên số của xã)
+    try {
+      if (report.agencyId) {
+        const agency = await Agency.findById(report.agencyId);
+        if (agency) {
+          const communeName = agency.name;
+          const totalBeneficiaries = (report.digitalSkills || 0) + (report.vneidSupport || 0) + (report.publicServices || 0);
+
+          await Team.findOneAndUpdate(
+            { 'location.commune': communeName },
+            {
+              $set: {
+                reporterName: report.reporterName,
+                evidenceLinks: report.evidenceLinks || '',
+                kpiSummary: {
+                  digitalSkills: report.digitalSkills || 0,
+                  vneidSupport: report.vneidSupport || 0,
+                  publicServices: report.publicServices || 0,
+                  qrSupport: report.qrSupport || 0,
+                  smartwebCount: report.smartwebCount || 0
+                },
+                statistics: {
+                  volunteersCount: report.volunteers || 15,
+                  projectsCount: report.youthProjects || 1,
+                  beneficiaries: totalBeneficiaries || 50
+                },
+                updatedAt: Date.now()
+              }
+            }
+          );
+        }
+      }
+    } catch (syncErr) {
+      console.error('Lỗi sync Team khi Admin update report:', syncErr);
+    }
+
+    const updatedReport = await CampaignReport.findById(id)
+      .populate('agencyId', 'name level district')
+      .populate('reporterId', 'username email role locationContext');
+
+    res.json({
+      message: '✅ Đã cập nhật số liệu báo cáo thành công!',
+      report: updatedReport
+    });
+  } catch (error) {
+    console.error('Error adminUpdateReport:', error);
+    res.status(500).json({ message: 'Lỗi server khi cập nhật báo cáo: ' + error.message });
+  }
+};
+
 // Xóa báo cáo sai / báo cáo rác (Dành cho Super Admin / Admin)
 exports.deleteReport = async (req, res) => {
   try {
