@@ -66,7 +66,7 @@ smartwebRegistrationSchema.index({ phone: 1 });
 smartwebRegistrationSchema.index({ createdAt: -1 });
 
 // Tự sinh mã tra cứu
-smartwebRegistrationSchema.pre('save', function(next) {
+smartwebRegistrationSchema.pre('save', function() {
   if (!this.trackingCode) {
     const now = new Date();
     const dateStr = now.getFullYear().toString() +
@@ -76,7 +76,6 @@ smartwebRegistrationSchema.pre('save', function(next) {
     this.trackingCode = `SW-${dateStr}-${random}`;
   }
   this.updatedAt = Date.now();
-  next();
 });
 
 module.exports = mongoose.model('SmartwebRegistration', smartwebRegistrationSchema);

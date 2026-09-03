@@ -97,7 +97,7 @@ const taskSchema = new mongoose.Schema({
 });
 
 // Tự động tính màu deadline & cập nhật trạng thái quá hạn
-taskSchema.pre('save', function(next) {
+taskSchema.pre('save', function() {
   this.updatedAt = new Date();
 
   // Tự động quá hạn
@@ -117,8 +117,6 @@ taskSchema.pre('save', function(next) {
   } else if (this.status === 'Hoàn thành') {
     this.deadlineColor = 'green';
   }
-
-  next();
 });
 
 // Index tìm kiếm nhanh

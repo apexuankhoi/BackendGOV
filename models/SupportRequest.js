@@ -79,7 +79,7 @@ supportRequestSchema.index({ senderPhone: 1 });
 supportRequestSchema.index({ createdAt: -1 });
 
 // Tự sinh mã tra cứu trước khi lưu
-supportRequestSchema.pre('save', function(next) {
+supportRequestSchema.pre('save', function() {
   if (!this.trackingCode) {
     // Format: HT-YYYYMMDD-XXXXX (HT = Hỗ Trợ)
     const now = new Date();
@@ -90,7 +90,6 @@ supportRequestSchema.pre('save', function(next) {
     this.trackingCode = `HT-${dateStr}-${random}`;
   }
   this.updatedAt = Date.now();
-  next();
 });
 
 module.exports = mongoose.model('SupportRequest', supportRequestSchema);
